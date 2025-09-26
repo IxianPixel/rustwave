@@ -2,3 +2,5 @@
 .env
 *.app
 *.iconset
+*.icns
+*.DS_Store
