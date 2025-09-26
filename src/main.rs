@@ -1,13 +1,14 @@
 use std::{io::Cursor, time::Duration, sync::mpsc};
 
 use iced::{
-    alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, progress_bar, row, slider, text, Space}, window, Event, Length, Subscription, Task
+    alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, row, slider, text, Space}, window, Event, Length, Subscription, Task
 };
 use iced::widget::{image, image::Handle};
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
-use souvlaki::{MediaControls, MediaMetadata, MediaPlayback, PlatformConfig, SeekDirection};
+use souvlaki::{MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
 
 use crate::utilities::DurationFormat;
+use crate::queue_manager::QueueManager;
 
 fn main() -> iced::Result {
     // Load the application icon
@@ -35,6 +36,8 @@ mod config;
 mod models;
 mod soundcloud;
 mod utilities;
+mod queue_manager;
+mod stream_manager;
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -48,6 +51,12 @@ enum Message {
     ProgressBarReleased,
     SeekToPosition(f32),
     MediaControlEvent(souvlaki::MediaControlEvent),
+    NextTrack,
+    PreviousTrack,
+    TrackEnded,
+    StartQueue(crate::models::SoundCloudTrack, Vec<crate::models::SoundCloudTrack>, crate::auth::TokenManager),
+    QueueStreamDownloaded(tokio_util::bytes::Bytes, Option<Handle>, crate::auth::TokenManager),
+    QueueStreamFailed(String, crate::auth::TokenManager),
 }
 
 trait Page {
@@ -69,9 +78,39 @@ struct MyApp {
     media_controls: MediaControls,
     media_event_receiver: mpsc::Receiver<souvlaki::MediaControlEvent>,
     current_track_data: Option<Vec<u8>>, // Store the current track data for backward seeking
+    queue_manager: QueueManager,
+    pending_stream_download: bool, // Flag to track if we're downloading the next track
+    token_manager: Option<crate::auth::TokenManager>, // Store token manager for queue operations
 }
 
 impl MyApp {
+    // Helper method to start downloading and playing a track
+    fn start_track_download(&mut self, track: &crate::models::SoundCloudTrack, token_manager: crate::auth::TokenManager) -> Task<Message> {
+        if track.stream_url.is_none() {
+            return Task::none();
+        }
+
+        self.title = track.title.clone();
+        self.user = track.user.username.clone();
+        self.track_duration = Duration::from_millis(track.duration);
+        self.stream_loading = true;
+        self.sink.clear();
+        self.pending_stream_download = true;
+
+        let track_clone = track.clone();
+        Task::perform(
+            async move { crate::stream_manager::download_track_stream(token_manager, &track_clone).await },
+            |result| match result {
+                Ok((track_data, image_handle, token_manager)) => {
+                    Message::QueueStreamDownloaded(track_data, image_handle, token_manager)
+                }
+                Err((error, token_manager)) => {
+                    Message::QueueStreamFailed(error, token_manager)
+                }
+            },
+        )
+    }
+
     // Unified backward seeking function that handles the workaround
     fn seek_backward(&mut self, seek_amount: Duration) -> bool {
         if self.sink.empty() {
@@ -175,26 +214,43 @@ impl MyApp {
                 media_controls,
                 media_event_receiver: receiver,
                 current_track_data: None,
+                queue_manager: QueueManager::new(),
+                pending_stream_download: false,
+                token_manager: None,
             },
             Task::none(),
         )
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
-        let (maybe_page, task) = self.page.update(message.clone());
+        let (maybe_page, page_task) = self.page.update(message.clone());
         if let Some(page) = maybe_page {
             self.page = page;
         }
 
-        match message {
-            Message::PageB(page_b::PageBMessage::PlayTrack(track)) => {
-                self.title = track.title.clone();
-                self.user = track.user.username.clone();
-                self.track_duration = Duration::from_millis(track.duration);
-                self.stream_loading = true;
-                self.sink.clear();
+        // Handle the main app messages
+        let app_task = match message {
+            Message::StartQueue(track, tracks, token_manager) => {
+                // Store the token manager for future queue operations
+                self.token_manager = Some(token_manager.clone());
+                
+                // Initialize the queue starting from the selected track
+                self.queue_manager.start_queue_from_track(track.id, tracks);
+                
+                // Start playing the first track in the queue
+                if let Some(current_track) = self.queue_manager.current_track().cloned() {
+                    self.start_track_download(&current_track, token_manager)
+                } else {
+                    Task::none()
+                }
             },
-            Message::PageB(page_b::PageBMessage::StreamDownloadedWithToken(track_data, image_handle, _)) => {
+            Message::PageB(page_b::PageBMessage::PlayTrack(_track)) => {
+                // This will be handled by the page to convert to StartQueue message
+                Task::none()
+            },
+            Message::QueueStreamDownloaded(track_data, image_handle, token_manager) => {
+                // Update stored token manager
+                self.token_manager = Some(token_manager);
                 // Store the track data for potential backward seeking workaround
                 self.current_track_data = Some(track_data.to_vec());
                 
@@ -205,6 +261,7 @@ impl MyApp {
                     Ok(source) => source,
                     Err(e) => {
                         eprintln!("Failed to create decoder: {e}");
+                        self.pending_stream_download = false;
                         return Task::none()
                     }
                 };
@@ -212,6 +269,7 @@ impl MyApp {
                 self.sink.append(source);
                 self.sink.play();
                 self.stream_loading = false;
+                self.pending_stream_download = false;
                 self.artwork = image_handle;
                 
                 // Update media controls metadata
@@ -226,6 +284,19 @@ impl MyApp {
                 let _ = self.media_controls.set_playback(MediaPlayback::Playing { 
                     progress: Some(souvlaki::MediaPosition(Duration::from_secs(0))) 
                 });
+                Task::none()
+            },
+            Message::QueueStreamFailed(error, token_manager) => {
+                eprintln!("Failed to download stream: {}", error);
+                self.stream_loading = false;
+                self.pending_stream_download = false;
+                // Update stored token manager
+                self.token_manager = Some(token_manager);
+                Task::none()
+            },
+            Message::PageB(page_b::PageBMessage::StreamDownloadedWithToken(track_data, image_handle, token_manager)) => {
+                // Legacy handler - redirect to new queue system
+                Task::done(Message::QueueStreamDownloaded(track_data, image_handle, token_manager))
             },
             Message::PlayPausePlayback => {
                 if !self.sink.empty() {
@@ -241,6 +312,7 @@ impl MyApp {
                         });
                     }
                 }
+                Task::none()
             },
             Message::SeekForwards => {
                 if !self.sink.empty() {
@@ -250,16 +322,18 @@ impl MyApp {
 
                     let _ = self.sink.try_seek(new_position);
                 }
+                Task::none()
             },
             Message::SeekBackwards => {
                 let seek_limit = Duration::from_secs(10);
                 self.seek_backward(seek_limit);
+                Task::none()
             },
             Message::UiTick => {
                 // Check for media control events
-                while let Ok(event) = self.media_event_receiver.try_recv() {
-                    // Process the media control event by calling update recursively
-                    return self.update(Message::MediaControlEvent(event));
+                if let Ok(event) = self.media_event_receiver.try_recv() {
+                    // Process the media control event
+                    return Task::done(Message::MediaControlEvent(event));
                 }
                 
                 if !self.sink.empty() {
@@ -267,6 +341,11 @@ impl MyApp {
                     self.track_position = new_position;
 
                     self.progress_bar_value = (new_position.as_secs_f32() / self.track_duration.as_secs_f32()) * 100.0;
+                    
+                    // Check if track has ended (reached the end or very close to it)
+                    if new_position >= self.track_duration.saturating_sub(Duration::from_millis(500)) && !self.pending_stream_download {
+                        return Task::done(Message::TrackEnded);
+                    }
                     
                     // Update media controls with current position
                     let playback_state = if self.sink.is_paused() {
@@ -276,6 +355,7 @@ impl MyApp {
                     };
                     let _ = self.media_controls.set_playback(playback_state);
                 }
+                Task::none()
             },
             Message::SeekToPosition(percent) => {
                 if !self.sink.empty() {
@@ -302,6 +382,7 @@ impl MyApp {
                         }
                     }
                 }
+                Task::none()
             }
             Message::MediaControlEvent(event) => {
                 match event {
@@ -329,20 +410,10 @@ impl MyApp {
                         }
                     }
                     souvlaki::MediaControlEvent::Next => {
-                        // You can implement next track functionality here
-                        // For now, we'll just seek forward
-                        if !self.sink.empty() {
-                            let seek_limit = Duration::from_secs(10);
-                            let cur_pos = self.sink.get_pos();
-                            let new_position = cur_pos + seek_limit;
-                            let _ = self.sink.try_seek(new_position);
-                        }
+                        return self.update(Message::NextTrack);
                     }
                     souvlaki::MediaControlEvent::Previous => {
-                        // You can implement previous track functionality here
-                        // For now, we'll just seek backward
-                        let seek_limit = Duration::from_secs(10);
-                        self.seek_backward(seek_limit);
+                        return self.update(Message::PreviousTrack);
                     }
                     souvlaki::MediaControlEvent::SeekBy(direction, offset) => {
                         match direction {
@@ -365,11 +436,48 @@ impl MyApp {
                     }
                     _ => {}
                 }
+                Task::none()
             }
-            _ => {}
-        }
+            Message::NextTrack => {
+                if let Some(next_track) = self.queue_manager.next_track().cloned() {
+                    if let Some(token_manager) = self.token_manager.clone() {
+                        self.start_track_download(&next_track, token_manager)
+                    } else {
+                        eprintln!("No token manager available for next track");
+                        Task::none()
+                    }
+                } else {
+                    Task::none()
+                }
+            },
+            Message::PreviousTrack => {
+                if let Some(prev_track) = self.queue_manager.previous_track().cloned() {
+                    if let Some(token_manager) = self.token_manager.clone() {
+                        self.start_track_download(&prev_track, token_manager)
+                    } else {
+                        eprintln!("No token manager available for previous track");
+                        Task::none()
+                    }
+                } else {
+                    Task::none()
+                }
+            },
+            Message::TrackEnded => {
+                // Automatically play next track when current track ends
+                if self.queue_manager.has_next() {
+                    Task::done(Message::NextTrack)
+                } else {
+                    // Queue finished, stop playback
+                    self.sink.clear();
+                    let _ = self.media_controls.set_playback(MediaPlayback::Stopped);
+                    Task::none()
+                }
+            },
+            _ => Task::none()
+        };
 
-        task
+        // Combine both tasks
+        Task::batch([page_task, app_task])
     }
     
     fn subscription(&self) -> iced::Subscription<Message> {
@@ -412,6 +520,12 @@ impl MyApp {
             image("placeholder.png").width(100).height(100)
         };
 
+        let queue = if let Some(current_pos) = self.queue_manager.current_position() {
+            text(format!("Queue: {} of {}", current_pos + 1, self.queue_manager.queue_length()))
+        } else {
+            text("Queue: Empty")
+        };
+
         column![
             container(
                 row![
@@ -421,13 +535,23 @@ impl MyApp {
                         if self.stream_loading { text("Loading stream...") } else { text(format!("Now Playing: {}", self.title)).shaping(text::Shaping::Advanced) },
                         text(format!("User: {}", self.user)).shaping(text::Shaping::Advanced),
                         text(format!("{} / {}", self.track_position.format_as_mmss(), self.track_duration.format_as_mmss())),
+                        
                     ]
                     .padding(5),
                     Space::with_width(Length::Fill),
                     container(
-                        button("Play/Pause").on_press(Message::PlayPausePlayback),
-                    )
-                    .align_y(Vertical::Center)
+                        column![
+                            row![
+                            button("Previous")
+                                .on_press(Message::PreviousTrack),
+                            button("Play/Pause").on_press(Message::PlayPausePlayback),
+                            button("Next")
+                                .on_press(Message::NextTrack),
+                        ].spacing(5),
+                        queue,
+                        ]
+                        .padding(5)
+                    ),
                 ],
             ).align_y(Vertical::Center),
             row![

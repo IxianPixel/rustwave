@@ -85,23 +85,11 @@ impl Page for PageB {
                 } 
                 PageBMessage::PlayTrack(track) => {
                     self.current_track_id = track.id;
-
-                    let stream_url = match &track.stream_url {
-                        Some(url) => url.clone(),
-                        None => String::new(),
-                    };
-                    let track_id = track.id;
-                    let image_handle = self.track_images.get(&track_id).cloned();
-                    let token_manager = self.token_manager.clone();
                     
+                    // Send the StartQueue message to main app with the selected track and all tracks
                     return (
                         None,
-                        Task::perform(api_helpers::get_track_data_with_refresh(token_manager, stream_url), move |result| {
-                            match result {
-                                Ok((track_data, token_manager)) => Message::PageB(Mb::StreamDownloadedWithToken(track_data, image_handle.clone(), token_manager)),
-                                Err((error, token_manager)) => Message::PageB(Mb::ApiErrorWithToken(error.to_string(), token_manager)),
-                            }
-                        })
+                        Task::done(Message::StartQueue(track.clone(), self.tracks.clone(), self.token_manager.clone()))
                     );
                 },
                 PageBMessage::ImageLoaded(track_id, handle) => {
@@ -250,8 +238,8 @@ impl Page for PageB {
 
         column![
             row![
-                button("Load Feed").on_press(Message::PageB(Mb::LoadFeed)),
-                button("Load Favourites").on_press(Message::PageB(Mb::LoadFavourites)),
+                button("Feed").on_press(Message::PageB(Mb::LoadFeed)),
+                button("Favourites").on_press(Message::PageB(Mb::LoadFavourites)),
                 text_input("Search", self.search_query.as_str())
                     .on_submit(Message::PageB(Mb::Search(self.search_query.clone())))
                     .on_input(|s| Message::PageB(Mb::SearchPressed(s))),
