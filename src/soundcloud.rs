@@ -1,15 +1,12 @@
-use std::time::Duration;
-
 use oauth2::AccessToken;
 use tokio_util::bytes::Bytes;
 
-use crate::{
+use crate::
     models::{
         SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists, SoundCloudPrimative,
         SoundCloudTrack, SoundCloudTracks,
-    },
-    utilities::DurationFormat,
-};
+    }
+;
 
 pub async fn get_playlists(
     access_token: &AccessToken,
@@ -154,58 +151,3 @@ pub async fn get_track_data(
 
     Ok(b)
 }
-
-/*
-pub fn get_track_table<'a>(tracks: Vec<SoundCloudTrack>) -> Vec<Row<'a>>
-where
-    SoundCloudTrack: 'a,
-{
-    let mut table_rows: Vec<Row<'a>> = Vec::new();
-
-    let mut track_number = 1;
-    for track in tracks {
-        // Convert the strings to owned strings with the right lifetime
-        let title = track.title.to_string();
-        let artist = track.user.username.to_string();
-
-        let playback_count = match track.playback_count {
-            Some(count) => count.to_string(),
-            None => 0.to_string(),
-        };
-
-        let repost_count = match track.reposts_count {
-            Some(count) => count.to_string(),
-            None => 0.to_string(),
-        };
-
-        let favourite_count = match track.favoritings_count {
-            Some(count) => count.to_string(),
-            None => 0.to_string(),
-        };
-
-        let track_duration = Duration::from_millis(track.duration);
-        let duration = track_duration.format_as_mmss();
-
-        let cells = vec![
-            track_number.to_string(),
-            title,
-            artist,
-            playback_count,
-            repost_count,
-            favourite_count,
-            duration,
-        ];
-
-        let mut row = Row::new(cells);
-
-        if track.access == "blocked" {
-            row = row.style(Style::new().red());
-        }
-
-        table_rows.push(row);
-        track_number += 1;
-    }
-
-    table_rows
-}
- */

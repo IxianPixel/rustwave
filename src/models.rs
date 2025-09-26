@@ -5,7 +5,7 @@ pub struct SoundCloudPrimative {
     pub collection: Vec<SoundCloudItem>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct SoundCloudTracks {
     pub collection: Vec<SoundCloudTrack>,
 }

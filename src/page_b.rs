@@ -8,7 +8,7 @@ use crate::models::SoundCloudTrack;
 use crate::utilities::get_track_widget;
 use crate::{Message, Page};
 use crate::auth::TokenManager;
-use crate::soundcloud;
+use crate::api_helpers;
 use tokio_util::bytes::Bytes;
 
 #[derive(Debug, Clone)]
@@ -16,18 +16,19 @@ pub enum PageBMessage {
     ButtonPressed,
     LoadFeed,
     LoadFavourites,
-    TracksLoaded(Vec<SoundCloudTrack>),
-    TrackLoadFailed,
     PlayTrack(SoundCloudTrack),
-    StreamDownloaded(Bytes, Option<Handle>),
-    StreamLoadFailed,
     ImageLoaded(u64, Handle), // track_id, image_handle
     ImageLoadFailed(u64), // track_id
     LikeTrack(SoundCloudTrack),
-    TrackLiked(u64),
-    TrackLikeFailed,
     SearchPressed(String),
     Search(String),
+    // New messages for handling token manager updates
+    FeedLoadedWithToken(Vec<SoundCloudTrack>, TokenManager),
+    FavouritesLoadedWithToken(crate::models::SoundCloudTracks, TokenManager),
+    SearchCompletedWithToken(Vec<SoundCloudTrack>, TokenManager),
+    TrackLikedWithToken(u64, TokenManager),
+    StreamDownloadedWithToken(Bytes, Option<Handle>, TokenManager),
+    ApiErrorWithToken(String, TokenManager),
 }
 type Mb = PageBMessage;
 
@@ -59,126 +60,176 @@ impl Page for PageB {
             match msg {
                 PageBMessage::ButtonPressed => return (Some(Box::new(AuthPage::new())), Task::none()),
                 PageBMessage::LoadFeed => {
-                                let token = self.token_manager.get_access_token();
-                                return (
-                                    None,
-                                    Task::perform(soundcloud::get_activity_feed(token), |result| {
-                                        match result {
-                                            Ok(tracks) => Message::PageB(Mb::TracksLoaded(tracks)),
-                                            Err(_ee) => Message::PageB(Mb::TrackLoadFailed),
-                                        }
-                                    })
-                                );
+                    let token_manager = self.token_manager.clone();
+                    return (
+                        None,
+                        Task::perform(api_helpers::load_feed_with_refresh(token_manager), |result| {
+                            match result {
+                                Ok((tracks, token_manager)) => Message::PageB(Mb::FeedLoadedWithToken(tracks, token_manager)),
+                                Err((error, token_manager)) => Message::PageB(Mb::ApiErrorWithToken(error.to_string(), token_manager)),
                             }
+                        })
+                    );
+                }
                 PageBMessage::LoadFavourites => {
-                                let token = self.token_manager.get_access_token();
-                                return (
-                                    None,
-                                    Task::perform(soundcloud::get_liked_tracks(token), |result| {
-                                        match result {
-                                            Ok(tracks) => Message::PageB(Mb::TracksLoaded(tracks.collection)),
-                                            Err(_ee) => Message::PageB(Mb::TrackLoadFailed),
-                                        }
-                                    })
-                                );
+                    let token_manager = self.token_manager.clone();
+                    return (
+                        None,
+                        Task::perform(api_helpers::load_favourites_with_refresh(token_manager), |result| {
+                            match result {
+                                Ok((tracks, token_manager)) => Message::PageB(Mb::FavouritesLoadedWithToken(tracks, token_manager)),
+                                Err((error, token_manager)) => Message::PageB(Mb::ApiErrorWithToken(error.to_string(), token_manager)),
                             }
-                PageBMessage::TracksLoaded(sound_cloud_tracks) => {
-                                self.track_load_failed = false;
-                                self.tracks = sound_cloud_tracks.clone();
-                    
-                                // Create tasks to load images for all tracks
-                                let image_tasks: Vec<Task<Message>> = sound_cloud_tracks
-                                    .iter()
-                                    .map(|track| {
-                                        let track_id = track.id;
-                                        let artwork_url = track.artwork_url.clone();
-                                        Task::perform(
-                                            async move { crate::utilities::download_image(&artwork_url).await },
-                                            move |result| match result {
-                                                Ok(handle) => Message::PageB(Mb::ImageLoaded(track_id, handle)),
-                                                Err(_) => Message::PageB(Mb::ImageLoadFailed(track_id)),
-                                            }
-                                        )
-                                    })
-                                    .collect();
-                    
-                                return (None, Task::batch(image_tasks))
-                            }
-                PageBMessage::TrackLoadFailed => { self.track_load_failed = true; return (None, Task::none()) }
+                        })
+                    );
+                } 
                 PageBMessage::PlayTrack(track) => {
-                                let token = self.token_manager.get_access_token();
-                                self.current_track_id = track.id;
+                    self.current_track_id = track.id;
 
-                                let stream_url = match &track.stream_url {
-                                    Some(url) => url.clone(),
-                                    None => String::new(),
-                                };
-                                let track_id = track.id;
-                                let image_handle = self.track_images.get(&track_id).cloned();
-                                return (
-                                    None,
-                                    Task::perform(soundcloud::get_track_data(token, stream_url), move |result| {
-                                        match result {
-                                            Ok(track_data) => Message::PageB(Mb::StreamDownloaded(track_data, image_handle.clone())),
-                                            Err(_ee) => Message::PageB(Mb::StreamLoadFailed),
-                                        }
-                                    })
-                                );
-                            },
-                PageBMessage::StreamDownloaded(_artwork, _image_handle) => {
-                                println!("Stream downloaded");
-                                // _image_handle is now Option<Handle>, you can use it as needed
+                    let stream_url = match &track.stream_url {
+                        Some(url) => url.clone(),
+                        None => String::new(),
+                    };
+                    let track_id = track.id;
+                    let image_handle = self.track_images.get(&track_id).cloned();
+                    let token_manager = self.token_manager.clone();
                     
-                                return (None, Task::none())
-                            },
-                PageBMessage::StreamLoadFailed => todo!(),
+                    return (
+                        None,
+                        Task::perform(api_helpers::get_track_data_with_refresh(token_manager, stream_url), move |result| {
+                            match result {
+                                Ok((track_data, token_manager)) => Message::PageB(Mb::StreamDownloadedWithToken(track_data, image_handle.clone(), token_manager)),
+                                Err((error, token_manager)) => Message::PageB(Mb::ApiErrorWithToken(error.to_string(), token_manager)),
+                            }
+                        })
+                    );
+                },
                 PageBMessage::ImageLoaded(track_id, handle) => {
-                                self.track_images.insert(track_id, handle);
-                                return (None, Task::none())
-                            },
+                    self.track_images.insert(track_id, handle);
+                    return (None, Task::none())
+                },
                 PageBMessage::ImageLoadFailed(track_id) => {
-                                println!("Failed to load image for track {}", track_id);
-                                return (None, Task::none())
-                            },
+                    println!("Failed to load image for track {}", track_id);
+                    return (None, Task::none())
+                },
                 PageBMessage::LikeTrack(track) => {
-                                let token = self.token_manager.get_access_token();
-                                return (
-                                    None,
-                                    Task::perform(soundcloud::like_track(token, track.clone()), move |result| {
-                                        match result {
-                                            Ok(_) => Message::PageB(Mb::TrackLiked(track.id)),
-                                            Err(_ee) => Message::PageB(Mb::TrackLikeFailed),
-                                        }
-                                    })
-                                );
-                            },
-                PageBMessage::TrackLiked(track_id) => {
-                                println!("Track liked: {}", track_id);
-                                return (None, Task::none())
-                            },
-                PageBMessage::TrackLikeFailed => {
-                                println!("Failed to like track");
-                                return (None, Task::none())
-                            },
+                    let token_manager = self.token_manager.clone();
+                    return (
+                        None,
+                        Task::perform(api_helpers::like_track_with_refresh(token_manager, track.clone()), move |result| {
+                            match result {
+                                Ok((track_id, token_manager)) => Message::PageB(Mb::TrackLikedWithToken(track_id, token_manager)),
+                                Err((error, token_manager)) => Message::PageB(Mb::ApiErrorWithToken(error.to_string(), token_manager)),
+                            }
+                        })
+                    );
+                },
                 PageBMessage::Search(query) => {
-                                self.search_query = query.clone();
-                                let token = self.token_manager.get_access_token();
-                                let search_query = self.search_query.clone(); // Clone the query for the async task
-                                return (
-                                    None,
-                                    Task::perform(
-                                        async move { soundcloud::search(token, &search_query).await },
-                                        |result| {
-                                            match result {
-                                                Ok(tracks) => Message::PageB(Mb::TracksLoaded(tracks)),
-                                                Err(_ee) => Message::PageB(Mb::TrackLoadFailed),
-                                            }
-                                        }
-                                    )
-                                );
-                            },
+                    self.search_query = query.clone();
+                    let token_manager = self.token_manager.clone();
+                    let search_query = self.search_query.clone(); // Clone the query for the async task
+                    return (
+                        None,
+                        Task::perform(
+                            api_helpers::search_with_refresh(token_manager, search_query),
+                            |result| {
+                                match result {
+                                    Ok((tracks, token_manager)) => Message::PageB(Mb::SearchCompletedWithToken(tracks, token_manager)),
+                                    Err((error, token_manager)) => Message::PageB(Mb::ApiErrorWithToken(error.to_string(), token_manager)),
+                                }
+                            }
+                        )
+                    );
+                },
                 PageBMessage::SearchPressed(query) => {
                     self.search_query = query.clone();
+                    return (None, Task::none())
+                },
+                // New message handlers for token-aware API calls
+                PageBMessage::FeedLoadedWithToken(tracks, token_manager) => {
+                    self.token_manager = token_manager;
+                    self.track_load_failed = false;
+                    self.tracks = tracks.clone();
+                    
+                    // Create tasks to load images for all tracks
+                    let image_tasks: Vec<Task<Message>> = tracks
+                        .iter()
+                        .map(|track| {
+                            let track_id = track.id;
+                            let artwork_url = track.artwork_url.clone();
+                            Task::perform(
+                                async move { crate::utilities::download_image(&artwork_url).await },
+                                move |result| match result {
+                                    Ok(handle) => Message::PageB(Mb::ImageLoaded(track_id, handle)),
+                                    Err(_) => Message::PageB(Mb::ImageLoadFailed(track_id)),
+                                }
+                            )
+                        })
+                        .collect();
+                    
+                    return (None, Task::batch(image_tasks))
+                },
+                PageBMessage::FavouritesLoadedWithToken(soundcloud_tracks, token_manager) => {
+                    self.token_manager = token_manager;
+                    self.track_load_failed = false;
+                    self.tracks = soundcloud_tracks.collection.clone();
+                    
+                    // Create tasks to load images for all tracks
+                    let image_tasks: Vec<Task<Message>> = soundcloud_tracks.collection
+                        .iter()
+                        .map(|track| {
+                            let track_id = track.id;
+                            let artwork_url = track.artwork_url.clone();
+                            Task::perform(
+                                async move { crate::utilities::download_image(&artwork_url).await },
+                                move |result| match result {
+                                    Ok(handle) => Message::PageB(Mb::ImageLoaded(track_id, handle)),
+                                    Err(_) => Message::PageB(Mb::ImageLoadFailed(track_id)),
+                                }
+                            )
+                        })
+                        .collect();
+                    
+                    return (None, Task::batch(image_tasks))
+                },
+                PageBMessage::SearchCompletedWithToken(tracks, token_manager) => {
+                    self.token_manager = token_manager;
+                    self.track_load_failed = false;
+                    self.tracks = tracks.clone();
+                    
+                    // Create tasks to load images for all tracks
+                    let image_tasks: Vec<Task<Message>> = tracks
+                        .iter()
+                        .map(|track| {
+                            let track_id = track.id;
+                            let artwork_url = track.artwork_url.clone();
+                            Task::perform(
+                                async move { crate::utilities::download_image(&artwork_url).await },
+                                move |result| match result {
+                                    Ok(handle) => Message::PageB(Mb::ImageLoaded(track_id, handle)),
+                                    Err(_) => Message::PageB(Mb::ImageLoadFailed(track_id)),
+                                }
+                            )
+                        })
+                        .collect();
+                    
+                    return (None, Task::batch(image_tasks))
+                },
+                PageBMessage::TrackLikedWithToken(track_id, token_manager) => {
+                    self.token_manager = token_manager;
+                    println!("Track liked: {}", track_id);
+                    return (None, Task::none())
+                },
+                PageBMessage::StreamDownloadedWithToken(_track_data, _image_handle, token_manager) => {
+                    self.token_manager = token_manager;
+                    println!("Stream downloaded");
+                    // _track_data and _image_handle can be used as needed
+                    return (None, Task::none())
+                },
+                PageBMessage::ApiErrorWithToken(error_msg, token_manager) => {
+                    self.token_manager = token_manager;
+                    self.track_load_failed = true;
+                    println!("API Error: {}", error_msg);
                     return (None, Task::none())
                 },
             }

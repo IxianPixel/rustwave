@@ -1,7 +1,7 @@
 use std::{io::Cursor, time::Duration, sync::mpsc};
 
 use iced::{
-    alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, progress_bar, row, text, Space}, window, Event, Length, Subscription, Task
+    alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, progress_bar, row, slider, text, Space}, window, Event, Length, Subscription, Task
 };
 use iced::widget::{image, image::Handle};
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
@@ -29,6 +29,7 @@ fn main() -> iced::Result {
 mod page_b;
 mod auth_page;
 mod auth;
+mod api_helpers;
 mod constants;
 mod config;
 mod models;
@@ -67,9 +68,76 @@ struct MyApp {
     progress_bar_value: f32,
     media_controls: MediaControls,
     media_event_receiver: mpsc::Receiver<souvlaki::MediaControlEvent>,
+    current_track_data: Option<Vec<u8>>, // Store the current track data for backward seeking
 }
 
 impl MyApp {
+    // Unified backward seeking function that handles the workaround
+    fn seek_backward(&mut self, seek_amount: Duration) -> bool {
+        if self.sink.empty() {
+            return false;
+        }
+
+        let cur_pos = self.sink.get_pos();
+        let new_position = cur_pos.saturating_sub(seek_amount);
+
+        // Try direct backward seek first
+        match self.sink.try_seek(new_position) {
+            Ok(_) => {
+                self.track_position = new_position;
+                true
+            },
+            Err(_) => {
+                // Advanced workaround: recreate the audio source and seek forward
+                if let Some(ref track_data) = self.current_track_data {
+                    // Remember if we were paused
+                    let was_paused = self.sink.is_paused();
+                    
+                    // Recreate the sink and source
+                    self.sink = Sink::connect_new(self.stream.mixer());
+                    
+                    match Decoder::new(Cursor::new(track_data.clone())) {
+                        Ok(source) => {
+                            self.sink.clear();
+                            self.sink.append(source);
+                            
+                            // If we want to seek to a position > 0, do forward seek
+                            if new_position > Duration::from_secs(0) {
+                                match self.sink.try_seek(new_position) {
+                                    Ok(_) => {
+                                        self.track_position = new_position;
+                                        
+                                        // Restore play/pause state
+                                        if was_paused {
+                                            self.sink.pause();
+                                        } else {
+                                            self.sink.play();
+                                        }
+                                        true
+                                    },
+                                    Err(_) => false,
+                                }
+                            } else {
+                                self.track_position = Duration::from_secs(0);
+                                
+                                // Restore play/pause state
+                                if was_paused {
+                                    self.sink.pause();
+                                } else {
+                                    self.sink.play();
+                                }
+                                true
+                            }
+                        },
+                        Err(_) => false,
+                    }
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     fn new() -> (Self, Task<Message>) {
         let stream = OutputStreamBuilder::open_default_stream()
             .expect("Failed to open default audio output stream");
@@ -106,6 +174,7 @@ impl MyApp {
                 progress_bar_value: 0.0,
                 media_controls,
                 media_event_receiver: receiver,
+                current_track_data: None,
             },
             Task::none(),
         )
@@ -125,7 +194,10 @@ impl MyApp {
                 self.stream_loading = true;
                 self.sink.clear();
             },
-            Message::PageB(page_b::PageBMessage::StreamDownloaded(track_data, image_handle)) => {
+            Message::PageB(page_b::PageBMessage::StreamDownloadedWithToken(track_data, image_handle, _)) => {
+                // Store the track data for potential backward seeking workaround
+                self.current_track_data = Some(track_data.to_vec());
+                
                 // Recreate a fresh Sink on our existing, long-lived stream's mixer
                 self.sink = Sink::connect_new(self.stream.mixer());
 
@@ -174,21 +246,14 @@ impl MyApp {
                 if !self.sink.empty() {
                     let seek_limit = Duration::from_secs(10);
                     let cur_pos = self.sink.get_pos();
-
                     let new_position = cur_pos + seek_limit;
 
                     let _ = self.sink.try_seek(new_position);
                 }
             },
             Message::SeekBackwards => {
-                if !self.sink.empty() {
-                    let seek_limit = Duration::from_secs(10);
-                    let cur_pos = self.sink.get_pos();
-
-                    let new_position = cur_pos - seek_limit;
-
-                    let _ = self.sink.try_seek(new_position);
-                }
+                let seek_limit = Duration::from_secs(10);
+                self.seek_backward(seek_limit);
             },
             Message::UiTick => {
                 // Check for media control events
@@ -215,9 +280,27 @@ impl MyApp {
             Message::SeekToPosition(percent) => {
                 if !self.sink.empty() {
                     let new_position = self.track_duration.mul_f32(percent / 100.0);
-                    let _ = self.sink.try_seek(new_position);
-                    self.track_position = new_position;
-                    self.progress_bar_value = percent;
+                    let current_position = self.sink.get_pos();
+                    
+                    // Determine if this is forward or backward seeking
+                    if new_position < current_position {
+                        // Backward seeking - use our unified function
+                        let seek_amount = current_position - new_position;
+                        if self.seek_backward(seek_amount) {
+                            self.progress_bar_value = percent;
+                        }
+                    } else {
+                        // Forward seeking - use direct seek
+                        match self.sink.try_seek(new_position) {
+                            Ok(_) => {
+                                self.track_position = new_position;
+                                self.progress_bar_value = percent;
+                            },
+                            Err(_) => {
+                                // Forward seek failed, don't update UI
+                            }
+                        }
+                    }
                 }
             }
             Message::MediaControlEvent(event) => {
@@ -258,21 +341,21 @@ impl MyApp {
                     souvlaki::MediaControlEvent::Previous => {
                         // You can implement previous track functionality here
                         // For now, we'll just seek backward
-                        if !self.sink.empty() {
-                            let seek_limit = Duration::from_secs(10);
-                            let cur_pos = self.sink.get_pos();
-                            let new_position = cur_pos.saturating_sub(seek_limit);
-                            let _ = self.sink.try_seek(new_position);
-                        }
+                        let seek_limit = Duration::from_secs(10);
+                        self.seek_backward(seek_limit);
                     }
                     souvlaki::MediaControlEvent::SeekBy(direction, offset) => {
-                        if !self.sink.empty() {
-                            let cur_pos = self.sink.get_pos();
-                            let new_position = match direction {
-                                souvlaki::SeekDirection::Forward => cur_pos + offset,
-                                souvlaki::SeekDirection::Backward => cur_pos.saturating_sub(offset),
-                            };
-                            let _ = self.sink.try_seek(new_position);
+                        match direction {
+                            souvlaki::SeekDirection::Forward => {
+                                if !self.sink.empty() {
+                                    let cur_pos = self.sink.get_pos();
+                                    let new_position = cur_pos + offset;
+                                    let _ = self.sink.try_seek(new_position);
+                                }
+                            },
+                            souvlaki::SeekDirection::Backward => {
+                                self.seek_backward(offset);
+                            }
                         }
                     }
                     souvlaki::MediaControlEvent::SetPosition(position) => {
@@ -348,7 +431,9 @@ impl MyApp {
                 ],
             ).align_y(Vertical::Center),
             row![
-                progress_bar(0.0..=100.0, self.progress_bar_value),
+                slider(0.0..=100.0, self.progress_bar_value, Message::SeekToPosition)
+                    .width(Length::Fill)
+                    .step(0.1),
             ]
             .padding(5),
             horizontal_rule(20.0),

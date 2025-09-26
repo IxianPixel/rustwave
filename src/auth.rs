@@ -120,6 +120,24 @@ pub struct TokenManager {
     refresh_token: Option<RefreshToken>,
 }
 
+impl Clone for TokenManager {
+    fn clone(&self) -> Self {
+        Self {
+            storage: TokenStorage::new().expect("Failed to create token storage"),
+            current_token: Arc::clone(&self.current_token),
+            refresh_token: self.refresh_token.clone(),
+        }
+    }
+}
+
+impl std::fmt::Debug for TokenManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenManager")
+            .field("has_refresh_token", &self.refresh_token.is_some())
+            .finish()
+    }
+}
+
 impl TokenManager {
     pub fn new(token: AccessToken, refresh_token: Option<RefreshToken>) -> Result<Self, AuthError> {
         let storage = TokenStorage::new()?;
@@ -132,6 +150,12 @@ impl TokenManager {
 
     pub fn get_access_token(&self) -> AccessToken {
         self.current_token.lock().unwrap().clone()
+    }
+
+    /// Get a fresh access token, refreshing if needed
+    pub async fn get_fresh_token(&mut self) -> Result<AccessToken, AuthError> {
+        self.refresh_if_needed().await?;
+        Ok(self.get_access_token())
     }
 
     pub async fn refresh_if_needed(&mut self) -> Result<(), AuthError> {

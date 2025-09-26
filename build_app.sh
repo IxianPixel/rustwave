@@ -22,6 +22,22 @@ mkdir -p Rustwave.app/Contents/Resources
 echo "Copying executable..."
 cp target/release/rustwave Rustwave.app/Contents/MacOS/
 
+# Copy the .env file if it exists
+if [ -f ".env" ]; then
+    echo "Copying .env file..."
+    cp .env Rustwave.app/Contents/MacOS/
+else
+    echo "Warning: .env file not found. Make sure to create it from .env.example"
+fi
+
+# Copy the assets folder
+if [ -d "assets" ]; then
+    echo "Copying assets folder..."
+    cp -r assets Rustwave.app/Contents/MacOS/
+else
+    echo "Warning: assets folder not found"
+fi
+
 # Create Info.plist
 echo "Creating Info.plist..."
 cat > Rustwave.app/Contents/Info.plist << 'EOF'
