@@ -2,9 +2,8 @@ use oauth2::basic::{BasicClient, BasicTokenType};
 use oauth2::{reqwest, AccessToken, RefreshToken, StandardTokenResponse};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, ConfigurationError, CsrfToken,
-    PkceCodeChallenge, RedirectUrl, RequestTokenError, StandardErrorResponse, TokenResponse, TokenUrl,
+    PkceCodeChallenge, RedirectUrl, TokenResponse, TokenUrl,
 };
-use oauth2::basic::BasicErrorResponseType;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;

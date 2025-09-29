@@ -1,4 +1,12 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+fn deserialize_null_default<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
+}
 
 #[derive(Deserialize)]
 pub struct SoundCloudPrimative {
@@ -46,19 +54,24 @@ pub struct SoundCloudItem {
 pub struct SoundCloudTrack {
     pub id: u64,
     pub stream_url: Option<String>,
+    #[serde(deserialize_with = "deserialize_null_default")]
     pub title: String,
     pub user: SoundCloudUser,
     pub duration: u64,
+    #[serde(deserialize_with = "deserialize_null_default")]
     pub access: String,
     pub playback_count: Option<u64>,
     pub favoritings_count: Option<u32>,
     pub reposts_count: Option<u32>,
+    #[serde(deserialize_with = "deserialize_null_default")]
     pub artwork_url: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct SoundCloudUser {
+    #[serde(deserialize_with = "deserialize_null_default")]
     pub username: String,
+    #[serde(deserialize_with = "deserialize_null_default")]
     pub full_name: String,
 }
 
