@@ -2,6 +2,7 @@ use crate::auth::{AuthError, TokenManager};
 use crate::models::{SoundCloudTrack, SoundCloudTracks};
 use crate::soundcloud;
 use tokio_util::bytes::Bytes;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Helper functions that combine token refresh with API calls for use with Iced Tasks
 
@@ -12,7 +13,14 @@ pub async fn load_feed_with_refresh(
         Ok(token) => {
             match soundcloud::get_activity_feed(token).await {
                 Ok(tracks) => Ok((tracks, token_manager)),
-                Err(_) => Err((AuthError::Other("Failed to load activity feed".to_string()), token_manager)),
+                Err(e) => {
+                    let error_msg = format!("{}", e);
+                    if error_msg.contains("401") || error_msg.contains("403") || error_msg.contains("Unauthorized") {
+                        Err((AuthError::OAuth("Authentication failed while loading activity feed".to_string()), token_manager))
+                    } else {
+                        Err((AuthError::Other(format!("Failed to load activity feed: {}", e)), token_manager))
+                    }
+                }
             }
         }
         Err(e) => Err((e, token_manager)),
@@ -41,7 +49,16 @@ pub async fn search_with_refresh(
         Ok(token) => {
             match soundcloud::search(token, &query).await {
                 Ok(tracks) => Ok((tracks, token_manager)),
-                Err(_) => Err((AuthError::Other("Failed to search tracks".to_string()), token_manager)),
+                Err(e) => {
+                    let error_msg = format!("{}", e);
+                    if error_msg.contains("401") || error_msg.contains("403") || error_msg.contains("Unauthorized") {
+                        Err((AuthError::OAuth("Authentication failed while searching tracks".to_string()), token_manager))
+                    } else if error_msg.contains("429") || error_msg.contains("Rate") {
+                        Err((AuthError::Other(format!("Rate limited while searching: {}", e)), token_manager))
+                    } else {
+                        Err((AuthError::Other(format!("Failed to search tracks: {}", e)), token_manager))
+                    }
+                }
             }
         }
         Err(e) => Err((e, token_manager)),

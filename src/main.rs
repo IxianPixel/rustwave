@@ -1,4 +1,9 @@
-use std::{io::Cursor, time::Duration, sync::mpsc};
+use std::{io::Cursor, time::Duration, sync::mpsc, sync::atomic::AtomicU64};
+
+// Global request tracking for debugging
+static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+static LAST_API_SUCCESS: AtomicU64 = AtomicU64::new(0);
+static LAST_API_FAILURE: AtomicU64 = AtomicU64::new(0);
 
 use iced::{
     alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, row, slider, text, Space}, window, Event, Length, Subscription, Task
@@ -11,6 +16,10 @@ use crate::utilities::DurationFormat;
 use crate::queue_manager::QueueManager;
 
 fn main() -> iced::Result {
+    // Only initialize tracing in debug builds
+    #[cfg(debug_assertions)]
+    tracing_subscriber::fmt::init();
+
     // Load the application icon
     let icon = window::icon::from_file_data(
         include_bytes!("../assets/icon.png"),

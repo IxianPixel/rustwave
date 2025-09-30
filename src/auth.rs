@@ -25,15 +25,26 @@ struct StoredToken {
     refresh_token: Option<String>,
     expires_at: Option<u64>,
     token_type: String,
+    #[serde(default = "default_created_at")]
+    created_at: u64, // When the refresh token was first created
+}
+
+fn default_created_at() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 impl StoredToken {
     fn from_token_response(token: StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         let expires_at = token.expires_in().map(|duration| {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() + duration.as_secs()
+            now + duration.as_secs()
         });
 
         Self {
@@ -41,6 +52,7 @@ impl StoredToken {
             refresh_token: token.refresh_token().map(|rt| rt.secret().to_string()),
             expires_at,
             token_type: "Bearer".to_string(), // SoundCloud uses Bearer tokens
+            created_at: now,
         }
     }
 
@@ -62,6 +74,19 @@ impl StoredToken {
 
     fn to_refresh_token(&self) -> Option<RefreshToken> {
         self.refresh_token.as_ref().map(|rt| RefreshToken::new(rt.clone()))
+    }
+
+    fn get_refresh_token_age_days(&self) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        (now - self.created_at) / (24 * 60 * 60)
+    }
+
+    fn is_refresh_token_old(&self) -> bool {
+        // SoundCloud refresh tokens may expire after some time (30-90 days typically)
+        self.get_refresh_token_age_days() > 30
     }
 }
 
@@ -153,29 +178,42 @@ impl TokenManager {
 
     /// Get a fresh access token, refreshing if needed
     pub async fn get_fresh_token(&mut self) -> Result<AccessToken, AuthError> {
-        self.refresh_if_needed().await?;
-        Ok(self.get_access_token())
+        match self.refresh_if_needed().await {
+            Ok(_) => Ok(self.get_access_token()),
+            Err(e) => Err(e),
+        }
     }
 
     pub async fn refresh_if_needed(&mut self) -> Result<(), AuthError> {
+        // Load the refresh token from storage to ensure we have the latest one
+        let refresh_token = if let Ok(Some(stored_token)) = self.storage.load_token() {
+            stored_token.to_refresh_token()
+        } else {
+            self.refresh_token.clone()
+        };
+
         // Check if we have a refresh token and if the current token is expired
-        if let Some(refresh_token) = &self.refresh_token {
-            if let Ok(new_token) = refresh_access_token(refresh_token.clone()).await {
-                info!("Successfully refreshed OAuth token during runtime");
-                self.storage.save_token(new_token.clone())?;
-                
-                // Update the current token
-                let mut current_token = self.current_token.lock().unwrap();
-                *current_token = new_token.access_token().clone();
-                
-                // Update the refresh token if a new one was provided
-                if let Some(new_refresh_token) = new_token.refresh_token() {
-                    self.refresh_token = Some(new_refresh_token.clone());
+        if let Some(refresh_token) = refresh_token {
+            match refresh_access_token(refresh_token.clone()).await {
+                Ok(new_token) => {
+                    info!("Successfully refreshed OAuth token during runtime");
+                    self.storage.save_token(new_token.clone())?;
+
+                    // Update the current token
+                    let mut current_token = self.current_token.lock().unwrap();
+                    *current_token = new_token.access_token().clone();
+
+                    // Update the refresh token if a new one was provided
+                    if let Some(new_refresh_token) = new_token.refresh_token() {
+                        self.refresh_token = Some(new_refresh_token.clone());
+                    }
                 }
-            } else {
-                return Err(AuthError::OAuth("Failed to refresh token during runtime".to_string()));
+                Err(e) => {
+                    return Err(AuthError::OAuth(format!("Failed to refresh token during runtime: {}", e)));
+                }
             }
         }
+
         Ok(())
     }
 
@@ -343,7 +381,18 @@ async fn refresh_access_token(refresh_token: RefreshToken) -> Result<StandardTok
 
     match token_result {
         Ok(token) => Ok(token),
-        Err(e) => Err(AuthError::OAuth(e.to_string())),
+        Err(e) => {
+            let error_string = format!("{}", e);
+            if error_string.contains("invalid_grant") {
+                Err(AuthError::OAuth("invalid_grant".to_string()))
+            } else if error_string.contains("invalid_client") {
+                Err(AuthError::OAuth("Invalid client credentials. Check CLIENT_ID and CLIENT_SECRET.".to_string()))
+            } else if error_string.contains("unauthorized_client") {
+                Err(AuthError::OAuth("Client not authorized to refresh tokens.".to_string()))
+            } else {
+                Err(AuthError::OAuth(format!("OAuth refresh failed: {}", e)))
+            }
+        }
     }
 }
 
