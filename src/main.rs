@@ -1,24 +1,21 @@
-use std::{io::Cursor, time::Duration, sync::mpsc, sync::atomic::AtomicU64};
-
-// Global request tracking for debugging
-static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
-static LAST_API_SUCCESS: AtomicU64 = AtomicU64::new(0);
-static LAST_API_FAILURE: AtomicU64 = AtomicU64::new(0);
+use std::{io::Cursor, time::Duration, sync::mpsc};
 
 use iced::{
-    alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, row, slider, text, Space}, window, Event, Length, Subscription, Task
+    alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, row, slider, svg, text, Space, Svg}, window, Color, Event, Length, Subscription, Task
 };
 use iced::widget::{image, image::Handle};
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
 use souvlaki::{MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
 
-use crate::utilities::DurationFormat;
+use crate::{pages::SearchPage, utilities::DurationFormat};
 use crate::queue_manager::QueueManager;
 
 fn main() -> iced::Result {
-    // Only initialize tracing in debug builds
+    // Only initialize tracing in debug builds, filtered to only rustwave logs
     #[cfg(debug_assertions)]
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter("rustwave=debug")
+        .init();
 
     // Load the application icon
     let icon = window::icon::from_file_data(
@@ -47,11 +44,15 @@ mod soundcloud;
 mod utilities;
 mod queue_manager;
 mod stream_manager;
+mod pages;
+mod widgets;
 
 #[derive(Debug, Clone)]
 enum Message {
     PageB(page_b::PageBMessage),
     AuthPage(auth_page::AuthPageMessage),
+    SearchPage(pages::SearchPageMessage),
+    FeedPage(pages::FeedPageMessage),
     PlayPausePlayback,
     SeekForwards,
     SeekBackwards,
@@ -66,6 +67,9 @@ enum Message {
     StartQueue(crate::models::SoundCloudTrack, Vec<crate::models::SoundCloudTrack>, crate::auth::TokenManager),
     QueueStreamDownloaded(tokio_util::bytes::Bytes, Option<Handle>, crate::auth::TokenManager),
     QueueStreamFailed(String, crate::auth::TokenManager),
+    NavigateToSearch,
+    NavigateToLikes,
+    NavigateToFeed,
 }
 
 trait Page {
@@ -551,14 +555,35 @@ impl MyApp {
                     container(
                         column![
                             row![
-                            button("Previous")
-                                .on_press(Message::PreviousTrack),
-                            button("Play/Pause").on_press(Message::PlayPausePlayback),
-                            button("Next")
-                                .on_press(Message::NextTrack),
-                        ].spacing(5),
-                        queue,
+                                button("Previous")
+                                    .on_press(Message::PreviousTrack),
+                                button("Play/Pause").on_press(Message::PlayPausePlayback),
+                                button("Next")
+                                    .on_press(Message::NextTrack),
+                            ].spacing(5),
+                            queue,
+                            row![
+                                button(
+                                    Svg::new("assets/feed.svg")
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
+                                ).on_press(Message::NavigateToFeed),
+                                button(
+                                    Svg::new("assets/heart.svg")
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
+                                ).on_press(Message::NavigateToLikes),
+                                button(
+                                    Svg::new("assets/search.svg")
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
+                                ).on_press(Message::NavigateToSearch),
+                            ].spacing(5),
                         ]
+                        .spacing(5)
                         .padding(5)
                     ),
                 ],

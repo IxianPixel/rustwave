@@ -3,6 +3,7 @@ use std::time::Duration;
 use iced::widget::{image, image::Handle, container, column, row};
 use iced::widget::{button, mouse_area, svg, text, MouseArea, Row, Svg};
 use iced::Color;
+use crate::models::SoundCloudUser;
 use crate::{models::SoundCloudTrack, page_b, Message};
 
 pub trait DurationFormat {
@@ -25,7 +26,7 @@ pub async fn download_image(url: &str) -> Result<Handle, Box<dyn std::error::Err
     Ok(Handle::from_bytes(bytes))
 }
 
-pub fn get_track_widget(track: &'_ SoundCloudTrack, image_handle: Option<Handle>) -> MouseArea<'_, Message> {
+pub fn get_user_widget(user: &'_ SoundCloudUser, image_handle: Option<Handle>) -> MouseArea<'_, Message> {
     let mut row = Row::new();
 
     // Add image if handle is available, otherwise show placeholder text
@@ -35,44 +36,16 @@ pub fn get_track_widget(track: &'_ SoundCloudTrack, image_handle: Option<Handle>
         row = row.push(text("Loading image..."));
     }
 
-    let duration = Duration::from_millis(track.duration);
-
-    let title_text = if track.stream_url.is_some() {
-        text(track.title.clone()).shaping(text::Shaping::Advanced)
-    } else {
-        text(format!("{} (Unavailable)", track.title.clone())).shaping(text::Shaping::Advanced).color(Color::from_rgb(1.0, 0.0, 0.0))
-    };
-
     row = row.push(
         column![
-            text(track.user.username.clone()).shaping(text::Shaping::Advanced).size(20),
-            title_text,
-            text(duration.format_as_mmss()),
-            row![
-                button(row![
-                    Svg::new("assets/heart.svg")
-                        .width(20)
-                        .height(20)
-                        .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
-                    text(track.favoritings_count.unwrap_or(0).to_string()).color(Color::from_rgb(1.0, 1.0, 1.0)),
-                ]).on_press(Message::PageB(page_b::PageBMessage::LikeTrack(track.clone()))),
-                button(row![
-                    Svg::new("assets/repost.svg").width(20).height(20)
-                        .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
-                    text(track.reposts_count.unwrap_or(0).to_string()).color(Color::from_rgb(1.0, 1.0, 1.0)),
-                ]).on_press(Message::PageB(page_b::PageBMessage::PlayTrack(track.clone()))),
-                button(row![
-                    Svg::new("assets/play.svg").width(20).height(20)
-                        .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
-                    text(track.playback_count.unwrap_or(0).to_string()).color(Color::from_rgb(1.0, 1.0, 1.0)),
-                ]).on_press(Message::PageB(page_b::PageBMessage::PlayTrack(track.clone()))),
-            ].spacing(5)
+            text(user.username.clone()).shaping(text::Shaping::Advanced).size(20),
+            text(format!("{} followers", format_compact_number(user.followers_count.unwrap_or(0)))).size(20),
         ]
     );
 
     mouse_area(
         container(row.spacing(10).padding(5))
-    ).on_press(Message::PageB(page_b::PageBMessage::PlayTrack(track.clone())))
+    )
 }
 
 pub fn get_track_queue(track_id: u64, tracks: Vec<SoundCloudTrack>) -> Vec<SoundCloudTrack> {
@@ -84,5 +57,38 @@ pub fn get_track_queue(track_id: u64, tracks: Vec<SoundCloudTrack>) -> Vec<Sound
     } else {
         // If the track is not found, return an empty queue
         Vec::new()
+    }
+}
+
+pub fn format_compact_number(num: u64) -> String {
+    match num {
+        n if n < 1_000 => n.to_string(),
+        n if n < 1_000_000 => {
+            let val = n as f64 / 1_000.0;
+            if val.fract() == 0.0 {
+                format!("{}K", val as u64)
+            } else {
+                let formatted = format!("{:.1}", val).trim_end_matches('0').trim_end_matches('.').to_string();
+                format!("{}K", formatted)
+            }
+        }
+        n if n < 1_000_000_000 => {
+            let val = n as f64 / 1_000_000.0;
+            if val.fract() == 0.0 {
+                format!("{}M", val as u64)
+            } else {
+                let formatted = format!("{:.1}", val).trim_end_matches('0').trim_end_matches('.').to_string();
+                format!("{}M", formatted)
+            }
+        }
+        n => {
+            let val = n as f64 / 1_000_000_000.0;
+            if val.fract() == 0.0 {
+                format!("{}B", val as u64)
+            } else {
+                let formatted = format!("{:.1}", val).trim_end_matches('0').trim_end_matches('.').to_string();
+                format!("{}B", formatted)
+            }
+        }
     }
 }
