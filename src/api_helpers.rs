@@ -1,5 +1,5 @@
 use crate::auth::{AuthError, TokenManager};
-use crate::models::{SearchResults, SoundCloudTrack, SoundCloudTracks};
+use crate::models::{SearchResults, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
 use crate::soundcloud;
 use tokio_util::bytes::Bytes;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -57,6 +57,30 @@ pub async fn search_with_refresh(
                         Err((AuthError::Other(format!("Rate limited while searching: {}", e)), token_manager))
                     } else {
                         Err((AuthError::Other(format!("Failed to search: {}", e)), token_manager))
+                    }
+                }
+            }
+        }
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
+pub async fn load_user_profile_with_refresh(
+    mut token_manager: TokenManager,
+    user_urn: String,
+) -> Result<(SoundCloudUserProfile, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => {
+            match soundcloud::get_user_profile(token, user_urn).await {
+                Ok(results) => Ok((results, token_manager)),
+                Err(e) => {
+                    let error_msg = format!("{}", e);
+                    if error_msg.contains("401") || error_msg.contains("403") || error_msg.contains("Unauthorized") {
+                        Err((AuthError::OAuth("Authentication failed while loading user profile".to_string()), token_manager))
+                    } else if error_msg.contains("429") || error_msg.contains("Rate") {
+                        Err((AuthError::Other(format!("Rate limited while loading user profile: {}", e)), token_manager))
+                    } else {
+                        Err((AuthError::Other(format!("Failed to load user profile: {}", e)), token_manager))
                     }
                 }
             }

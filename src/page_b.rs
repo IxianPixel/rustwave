@@ -10,7 +10,7 @@ use crate::widgets::get_track_widget;
 use crate::{Message, Page};
 use crate::auth::TokenManager;
 use crate::api_helpers;
-use crate::pages::{FeedPage, SearchPage};
+use crate::pages::{FeedPage, SearchPage, UserPage};
 use tokio_util::bytes::Bytes;
 
 #[derive(Debug, Clone)]
@@ -28,6 +28,7 @@ pub enum PageBMessage {
     TrackLikedWithToken(u64, TokenManager),
     StreamDownloadedWithToken(Bytes, Option<Handle>, TokenManager),
     ApiErrorWithToken(String, TokenManager),
+    LoadUser(String),
 }
 type Mb = PageBMessage;
 
@@ -174,6 +175,10 @@ impl Page for PageB {
                                             println!("API Error: {}", error_msg);
                                             return (None, Task::none())
                                         },
+                PageBMessage::LoadUser(user_urn) => {
+                    let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
+                    return (Some(Box::new(user_page)), task);
+                },
             }
         }
         
@@ -197,7 +202,12 @@ impl Page for PageB {
             .iter()
             .fold(column![], |col, track| {
                 let image_handle = self.track_images.get(&track.id).cloned();
-                col.push(get_track_widget(track, image_handle, |t| Message::PageB(Mb::PlayTrack(t))))
+                col.push(get_track_widget(
+                    track,
+                    image_handle,
+                    |t| Message::PageB(Mb::PlayTrack(t)),
+                    |urn| Message::PageB(Mb::LoadUser(urn))
+                ))
             });
 
         column![

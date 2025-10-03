@@ -53,6 +53,7 @@ enum Message {
     AuthPage(auth_page::AuthPageMessage),
     SearchPage(pages::SearchPageMessage),
     FeedPage(pages::FeedPageMessage),
+    UserPage(pages::UserPageMessage),
     PlayPausePlayback,
     SeekForwards,
     SeekBackwards,

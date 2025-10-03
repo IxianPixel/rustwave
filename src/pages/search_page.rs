@@ -1,5 +1,6 @@
 use crate::page_b::PageB;
-use crate::utilities::get_user_widget;
+use crate::pages::UserPage;
+use crate::widgets::get_user_widget;
 use crate::widgets::get_track_widget;
 use crate::{api_helpers, Message, Page};
 use iced::widget::{column, row, text_input, Scrollable};
@@ -22,6 +23,7 @@ pub enum SearchPageMessage {
     TrackImageLoadFailed(u64),
     PlayTrack(SoundCloudTrack),
     LikeTrack(SoundCloudTrack),
+    LoadUser(String),
 }
 
 type Ms = SearchPageMessage;
@@ -148,6 +150,11 @@ impl Page for SearchPage {
                     );
                 },
                 SearchPageMessage::LikeTrack(sound_cloud_track) => todo!(),
+                SearchPageMessage::LoadUser(user_urn) => {
+                    debug!("Loading user {}", user_urn);
+                    let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
+                    return (Some(Box::new(user_page)), task);
+                },
             }
         }
 
@@ -171,7 +178,7 @@ impl Page for SearchPage {
             .fold(row![], |col, &idx| {
                 let user = &self.users[idx];
                 let image_handle = self.user_images.get(&user.urn).cloned();
-                col.push(get_user_widget(user, image_handle))
+                col.push(get_user_widget(user, image_handle, |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn))))
             });
 
         let tracks_column = self
@@ -179,7 +186,12 @@ impl Page for SearchPage {
             .iter()
             .fold(column![], |col, track| {
                 let image_handle = self.track_images.get(&track.id).cloned();
-                col.push(get_track_widget(track, image_handle, |t| Message::SearchPage(SearchPageMessage::PlayTrack(t))))
+                col.push(get_track_widget(
+                    track,
+                    image_handle,
+                    |t| Message::SearchPage(SearchPageMessage::PlayTrack(t)),
+                    |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn))
+                ))
             });
 
         column![

@@ -4,6 +4,7 @@ use crate::api_helpers;
 use crate::models::SoundCloudTrack;
 use crate::auth::TokenManager;
 use crate::pages::SearchPage;
+use crate::pages::UserPage;
 use crate::widgets::get_track_widget;
 use std::collections::HashMap;
 use crate::Page;
@@ -23,6 +24,7 @@ pub enum FeedPageMessage {
     LikeTrack(SoundCloudTrack),
     TrackLikedWithToken(u64, TokenManager),
     ApiErrorWithToken(String, TokenManager),
+    LoadUser(String),
 }
 
 type Mf = FeedPageMessage;
@@ -122,6 +124,10 @@ impl Page for FeedPage {
                     self.track_load_failed = true;
                     return (None, Task::none())
                 },
+                FeedPageMessage::LoadUser(user_urn) => {
+                    let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
+                    return (Some(Box::new(user_page)), task)
+                },
             }
         }
 
@@ -138,7 +144,12 @@ impl Page for FeedPage {
             .iter()
             .fold(column![], |col, track| {
                 let image_handle = self.track_images.get(&track.id).cloned();
-                col.push(get_track_widget(track, image_handle, |t| Message::FeedPage(FeedPageMessage::PlayTrack(t))))
+                col.push(get_track_widget(
+                    track, 
+                    image_handle,
+                    |t| Message::FeedPage(FeedPageMessage::PlayTrack(t)),
+                    |urn| Message::FeedPage(FeedPageMessage::LoadUser(urn))
+                ))
             });
 
         column![

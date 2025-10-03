@@ -4,7 +4,7 @@ use tokio::try_join;
 
 use crate::
     models::{
-        SearchResults, SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists, SoundCloudPrimative, SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUsers
+        SearchResults, SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists, SoundCloudPrimative, SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile, SoundCloudUsers
     }
 ;
 
@@ -199,4 +199,57 @@ pub async fn get_track_data(
     let b = response.bytes().await?;
 
     Ok(b)
+}
+
+pub async fn get_user(access_token: AccessToken, user_urn: String) -> Result<SoundCloudUser, Box<dyn std::error::Error + Send + Sync>> {
+    let c = reqwest::Client::new();
+    let response = c
+        .get(format!("https://api.soundcloud.com/users/{}", user_urn))
+        .bearer_auth(access_token.secret())
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudUser>().await?;
+    Ok(body)
+}
+
+pub async fn get_user_tracks(
+    access_token: AccessToken, user_urn: String
+) -> Result<Vec<SoundCloudTrack>, Box<dyn std::error::Error + Send + Sync>> {
+    let c = reqwest::Client::new();
+    let response = c
+        .get(format!("https://api.soundcloud.com/users/{}/tracks", user_urn))
+        .query(&[
+            ("access", "playable,blocked"),
+            ("limit", "50"),
+            ("linked_partitioning", "true"),
+        ])
+        .bearer_auth(access_token.secret())
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudTracks>().await?;
+    Ok(body.collection)
+}
+
+pub async fn get_user_profile(
+    access_token: AccessToken, user_urn: String
+) -> Result<SoundCloudUserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    let (user, tracks) = try_join!(
+        get_user(access_token.clone(), user_urn.clone()),
+        get_user_tracks(access_token.clone(), user_urn.clone()),
+    )?;
+    Ok(SoundCloudUserProfile { user, tracks })
 }

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::{SoundCloudTrack, SoundCloudTracks};
+
 use super::deserialize_null_default;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -19,41 +21,21 @@ pub struct SoundCloudUser {
     pub followers_count: Option<u64>,
 }
 
-
-enum BaseEnum {
-    Variant1,
-    Variant2,
-}
-
-enum ExtendedEnum {
-    Variant1,
-    Variant2,
-    Variant3,
-}
-
-
-fn example(b: impl Into<BaseEnum>) {
-    let base: BaseEnum = b.into();
-    match base {
-        BaseEnum::Variant1 => println!("Variant1"),
-        BaseEnum::Variant2 => println!("Variant2"),
-    }
-}
-
-impl From<ExtendedEnum> for BaseEnum {
-    fn from(value: ExtendedEnum) -> Self {
-        match value {
-            ExtendedEnum::Variant1 => BaseEnum::Variant1,
-            ExtendedEnum::Variant2 => BaseEnum::Variant2,
-            ExtendedEnum::Variant3 => BaseEnum::Variant2,
+impl Default for SoundCloudUser {
+    fn default() -> Self {
+        Self {
+            urn: String::new(),
+            username: String::new(),
+            full_name: String::new(),
+            avatar_url: String::new(),
+            followers_count: None,
         }
     }
 }
 
-fn function() {
-    let e = ExtendedEnum::Variant1;
-    example(e);
-    
+#[derive(Deserialize, Debug, Clone)]
+pub struct SoundCloudUserProfile {
+    pub user: SoundCloudUser,
+    pub tracks: Vec<SoundCloudTrack>,
 }
-
 
