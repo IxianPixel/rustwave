@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-
 use crate::auth_page::AuthPage;
 use iced::widget::{button, column, row, text, text_input, Scrollable};
 use iced::widget::image::Handle;
 use iced::{Color, Length, Task};
 use tracing::{debug, info};
 use crate::models::SoundCloudTrack;
-use crate::widgets::get_track_widget;
+use crate::track_list_manager::TrackListManager;
 use crate::{Message, Page};
 use crate::auth::TokenManager;
 use crate::api_helpers;
@@ -34,10 +32,8 @@ type Mb = PageBMessage;
 
 pub struct PageB {
     token_manager: TokenManager,
-    tracks: Vec<SoundCloudTrack>,
+    track_list: TrackListManager,
     track_load_failed: bool,
-    track_images: HashMap<u64, Handle>, // track_id -> image_handle
-    current_track_id: u64,
     search_query: String,
 }
 
@@ -45,10 +41,8 @@ impl PageB {
     pub fn new(token_manager: TokenManager) -> Self {
         Self {
             token_manager,
-            tracks: Vec::new(),
+            track_list: TrackListManager::new(),
             track_load_failed: false,
-            track_images: HashMap::new(),
-            current_track_id: 0,
             search_query: String::new(),
         }
     }
@@ -84,16 +78,16 @@ impl Page for PageB {
                                             );
                                         }
                 PageBMessage::PlayTrack(track) => {
-                                            self.current_track_id = track.id;
-                    
+                                            self.track_list.set_current_track_id(track.id);
+
                                             // Send the StartQueue message to main app with the selected track and all tracks
                                             return (
                                                 None,
-                                                Task::done(Message::StartQueue(track.clone(), self.tracks.clone(), self.token_manager.clone()))
+                                                Task::done(Message::StartQueue(track.clone(), self.track_list.tracks().clone(), self.token_manager.clone()))
                                             );
                                         },
                 PageBMessage::ImageLoaded(track_id, handle) => {
-                                            self.track_images.insert(track_id, handle);
+                                            self.track_list.handle_image_loaded(track_id, handle);
                                             return (None, Task::none())
                                         },
                 PageBMessage::ImageLoadFailed(track_id) => {
@@ -115,47 +109,27 @@ impl Page for PageB {
                 PageBMessage::FeedLoadedWithToken(tracks, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = false;
-                    self.tracks = tracks.clone();
+                    self.track_list.set_tracks(tracks);
 
                     // Create tasks to load images for all tracks
-                    let image_tasks: Vec<Task<Message>> = tracks
-                        .iter()
-                        .map(|track| {
-                            let track_id = track.id;
-                            let artwork_url = track.artwork_url.clone();
-                            Task::perform(
-                                async move { crate::utilities::download_image(&artwork_url).await },
-                                move |result| match result {
-                                    Ok(handle) => Message::PageB(Mb::ImageLoaded(track_id, handle)),
-                                    Err(_) => Message::PageB(Mb::ImageLoadFailed(track_id)),
-                                }
-                            )
-                        })
-                        .collect();
+                    let image_tasks = self.track_list.create_image_load_tasks(
+                        |track_id, handle| Message::PageB(Mb::ImageLoaded(track_id, handle)),
+                        |track_id| Message::PageB(Mb::ImageLoadFailed(track_id))
+                    );
 
                     return (None, Task::batch(image_tasks))
                 },
                 PageBMessage::FavouritesLoadedWithToken(soundcloud_tracks, token_manager) => {
                                             self.token_manager = token_manager;
                                             self.track_load_failed = false;
-                                            self.tracks = soundcloud_tracks.collection.clone();
-                    
+                                            self.track_list.set_tracks(soundcloud_tracks.collection);
+
                                             // Create tasks to load images for all tracks
-                                            let image_tasks: Vec<Task<Message>> = soundcloud_tracks.collection
-                                                .iter()
-                                                .map(|track| {
-                                                    let track_id = track.id;
-                                                    let artwork_url = track.artwork_url.clone();
-                                                    Task::perform(
-                                                        async move { crate::utilities::download_image(&artwork_url).await },
-                                                        move |result| match result {
-                                                            Ok(handle) => Message::PageB(Mb::ImageLoaded(track_id, handle)),
-                                                            Err(_) => Message::PageB(Mb::ImageLoadFailed(track_id)),
-                                                        }
-                                                    )
-                                                })
-                                                .collect();
-                    
+                                            let image_tasks = self.track_list.create_image_load_tasks(
+                                                |track_id, handle| Message::PageB(Mb::ImageLoaded(track_id, handle)),
+                                                |track_id| Message::PageB(Mb::ImageLoadFailed(track_id))
+                                            );
+
                                             return (None, Task::batch(image_tasks))
                                         },
                 PageBMessage::TrackLikedWithToken(track_id, token_manager) => {
@@ -195,20 +169,10 @@ impl Page for PageB {
     }
 
     fn view(&self) -> iced::Element<Message> {
-        // Build a column of track titles from the iterator. A for-loop inside
-        // the `column![]` macro yields `()` and causes `Element: From<()>` errors.
-        let tracks_column = self
-            .tracks
-            .iter()
-            .fold(column![], |col, track| {
-                let image_handle = self.track_images.get(&track.id).cloned();
-                col.push(get_track_widget(
-                    track,
-                    image_handle,
-                    |t| Message::PageB(Mb::PlayTrack(t)),
-                    |urn| Message::PageB(Mb::LoadUser(urn))
-                ))
-            });
+        let tracks_column = self.track_list.render_tracks(
+            |t| Message::PageB(Mb::PlayTrack(t)),
+            |urn| Message::PageB(Mb::LoadUser(urn))
+        );
 
         column![
             row![

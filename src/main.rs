@@ -46,6 +46,7 @@ mod queue_manager;
 mod stream_manager;
 mod pages;
 mod widgets;
+mod track_list_manager;
 
 #[derive(Debug, Clone)]
 enum Message {

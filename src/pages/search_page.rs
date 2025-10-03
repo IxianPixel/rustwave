@@ -1,13 +1,13 @@
 use crate::page_b::PageB;
 use crate::pages::UserPage;
 use crate::widgets::get_user_widget;
-use crate::widgets::get_track_widget;
+use crate::track_list_manager::TrackListManager;
 use crate::{api_helpers, Message, Page};
 use iced::widget::{column, row, text_input, Scrollable};
 use iced::{Length, Task};
 use tracing::debug;
 use crate::auth::TokenManager;
-use crate::models::{SearchResults, SoundCloudTrack, SoundCloudUser, TrackMessage};
+use crate::models::{SearchResults, SoundCloudTrack, SoundCloudUser};
 use iced::widget::image::Handle;
 use std::collections::HashMap;
 
@@ -34,9 +34,7 @@ pub struct SearchPage {
     user_load_failed: bool,
     user_images: HashMap<String, Handle>,
     users: Vec<SoundCloudUser>,
-    tracks: Vec<SoundCloudTrack>,
-    track_images: HashMap<u64, Handle>,
-    current_track_id: u64,
+    track_list: TrackListManager,
 }
 
 impl SearchPage {
@@ -47,9 +45,7 @@ impl SearchPage {
             user_load_failed: false,
             user_images: HashMap::new(),
             users: Vec::new(),
-            tracks: Vec::new(),
-            track_images: HashMap::new(),
-            current_track_id: 0,
+            track_list: TrackListManager::new(),
         }
     }
 }   
@@ -84,7 +80,7 @@ impl Page for SearchPage {
                     self.token_manager = token_manager;
                     self.user_load_failed = false;
                     self.users = results.users.clone();
-                    self.tracks = results.tracks.clone();
+                    self.track_list.set_tracks(results.tracks);
 
                     // Create tasks to load images for all users
                     let image_tasks: Vec<Task<Message>> = self.users
@@ -103,20 +99,10 @@ impl Page for SearchPage {
                         .collect();
 
                     // Create tasks to load images for all tracks
-                    let track_image_tasks: Vec<Task<Message>> = self.tracks
-                        .iter()
-                        .map(|track| {
-                            let track_id = track.id;
-                            let artwork_url = track.artwork_url.clone();
-                            Task::perform(
-                                async move { crate::utilities::download_image(&artwork_url).await },
-                                move |result| match result {
-                                    Ok(handle) => Message::SearchPage(Ms::TrackImageLoaded(track_id, handle)),
-                                    Err(_) => Message::SearchPage(Ms::TrackImageLoadFailed(track_id)),
-                                }
-                            )
-                        })
-                        .collect();
+                    let track_image_tasks = self.track_list.create_image_load_tasks(
+                        |track_id, handle| Message::SearchPage(Ms::TrackImageLoaded(track_id, handle)),
+                        |track_id| Message::SearchPage(Ms::TrackImageLoadFailed(track_id))
+                    );
 
                     return (None, Task::batch(image_tasks.into_iter().chain(track_image_tasks)))
                 },
@@ -135,18 +121,18 @@ impl Page for SearchPage {
                     return (None, Task::none())
                 },
                 SearchPageMessage::TrackImageLoaded(track_id, handle) => {
-                    self.track_images.insert(track_id, handle);
+                    self.track_list.handle_image_loaded(track_id, handle);
                     return (None, Task::none())
                 }
                 SearchPageMessage::TrackImageLoadFailed(track_id) => {
                     println!("Failed to load image for track {}", track_id);
-                    return (None, Task::none()) 
+                    return (None, Task::none())
                 }
                 SearchPageMessage::PlayTrack(track) => {
-                    self.current_track_id = track.id;
+                    self.track_list.set_current_track_id(track.id);
                     return (
                         None,
-                        Task::done(Message::StartQueue(track.clone(), self.tracks.clone(), self.token_manager.clone()))
+                        Task::done(Message::StartQueue(track.clone(), self.track_list.tracks().clone(), self.token_manager.clone()))
                     );
                 },
                 SearchPageMessage::LikeTrack(sound_cloud_track) => todo!(),
@@ -181,18 +167,10 @@ impl Page for SearchPage {
                 col.push(get_user_widget(user, image_handle, |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn))))
             });
 
-        let tracks_column = self
-            .tracks
-            .iter()
-            .fold(column![], |col, track| {
-                let image_handle = self.track_images.get(&track.id).cloned();
-                col.push(get_track_widget(
-                    track,
-                    image_handle,
-                    |t| Message::SearchPage(SearchPageMessage::PlayTrack(t)),
-                    |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn))
-                ))
-            });
+        let tracks_column = self.track_list.render_tracks(
+            |t| Message::SearchPage(SearchPageMessage::PlayTrack(t)),
+            |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn))
+        );
 
         column![
             row![
