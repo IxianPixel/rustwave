@@ -1,16 +1,20 @@
+use std::collections::HashMap;
+
 use iced::Task;
 use tracing::debug;
 
 use crate::auth::TokenManager;
 use crate::page_b::PageB;
-use crate::pages::{FeedPage, SearchPage};
+use crate::pages::{FeedPage, PlaylistPage, SearchPage};
 use crate::track_list_manager::TrackListManager;
+use crate::utilities::get_asset_path;
+use crate::widgets::get_playlist_widget;
 use crate::{api_helpers, Message, Page};
-use iced::widget::image::Handle;
+use iced::widget::image::{self, Handle};
 use iced::widget::{column, row, text, Scrollable};
 use iced::Color;
 use iced::Length;
-use crate::models::{SoundCloudTrack, SoundCloudUser, SoundCloudUserProfile};
+use crate::models::{SoundCloudTrack, SoundCloudUser, SoundCloudUserProfile, SoundCloudPlaylist};
 
 #[derive(Debug, Clone)]
 pub enum UserPageMessage {
@@ -18,11 +22,14 @@ pub enum UserPageMessage {
     UserProfileLoaded(SoundCloudUserProfile, TokenManager),
     UserImageLoaded(String, Handle),
     UserImageLoadFailed(String),
+    PlaylistImageLoaded(String, Handle),
+    PlaylistImageLoadFailed(String),
     ApiErrorWithToken(String, TokenManager),
     TrackImageLoaded(u64, Handle),
     TrackImageLoadFailed(u64),
     PlayTrack(SoundCloudTrack),
     NavigateToUser(String),
+    LoadPlaylist(SoundCloudPlaylist),
 }
 
 type Mu = UserPageMessage;
@@ -31,6 +38,8 @@ pub struct UserPage {
     token_manager: TokenManager,
     user_urn: String,
     user: SoundCloudUser,
+    playlists: Vec<SoundCloudPlaylist>,
+    playlist_images: HashMap<String, Handle>,
     track_list: TrackListManager,
     track_load_failed: bool,
 }
@@ -42,6 +51,8 @@ impl UserPage {
                 token_manager,
                 user_urn,
                 user: SoundCloudUser::default(),
+                playlists: Vec::new(),
+                playlist_images: HashMap::new(),
                 track_list: TrackListManager::new(),
                 track_load_failed: false,
             },
@@ -70,6 +81,7 @@ impl Page for UserPage {
                 UserPageMessage::UserProfileLoaded(profile, token_manager) => {
                     self.token_manager = token_manager;
                     self.user = profile.user.clone();
+                    self.playlists = profile.playlists.clone();
                     self.track_list.set_tracks(profile.tracks);
 
                     // Create tasks to load images for all tracks
@@ -78,14 +90,41 @@ impl Page for UserPage {
                         |track_id| Message::UserPage(UserPageMessage::TrackImageLoadFailed(track_id))
                     );
 
-                    return (None, Task::batch(track_image_tasks))
+                    // Create tasks to load images for all playlists
+                    let playlist_image_tasks: Vec<Task<Message>> = self.playlists
+                        .iter()
+                        .map(|playlist| {
+                            let playlist_urn = playlist.urn.clone();
+                            let artwork_url = playlist.artwork_url.clone();
+                            debug!("Downloading for {}", artwork_url);
+                            Task::perform(
+                                async move { crate::utilities::download_image(&artwork_url).await },
+                                move |result| match result {
+                                    Ok(handle) => Message::UserPage(Mu::PlaylistImageLoaded(playlist_urn.clone(), handle)),
+                                    Err(_) => Message::UserPage(Mu::PlaylistImageLoadFailed(playlist_urn.clone())),
+                                }
+                            )
+                        })
+                        .collect();
+
+                    return (None, Task::batch(track_image_tasks.into_iter().chain(playlist_image_tasks)))
                 }
                 UserPageMessage::TrackImageLoaded(track_id, handle) => {
                     self.track_list.handle_image_loaded(track_id, handle);
                     return (None, Task::none())
                 }
                 UserPageMessage::TrackImageLoadFailed(track_id) => {
-                    println!("Failed to load image for track {}", track_id);
+                    debug!("Failed to load image for track {}", track_id);
+                    return (None, Task::none())
+                }
+                UserPageMessage::PlaylistImageLoaded(urn, handle) => {
+                    self.playlist_images.insert(urn, handle);
+                    return (None, Task::none())
+                }
+                UserPageMessage::PlaylistImageLoadFailed(urn) => {
+                    debug!("Failed to load image for playlist {}", urn);
+                    let handle = image::Handle::from_path(get_asset_path("assets/icon/png"));
+                    self.playlist_images.insert(urn, handle);
                     return (None, Task::none())
                 }
                 UserPageMessage::UserImageLoaded(_, handle) => todo!(),
@@ -106,6 +145,10 @@ impl Page for UserPage {
                     debug!("Loading user {}", user_urn);
                     return (None, Task::none());
                 },
+                UserPageMessage::LoadPlaylist(playlist) => {
+                    let (playlist_page, task) = PlaylistPage::new(self.token_manager.clone(), playlist);
+                    return (Some(Box::new(playlist_page)), task);
+                }
             }
         }
 
@@ -131,9 +174,17 @@ impl Page for UserPage {
             |urn| Message::UserPage(UserPageMessage::NavigateToUser(urn))
         );
 
+        let playlists_column = self.playlists.iter().fold(column![], |col, playlist| {
+            let image_handle = self.playlist_images.get(&playlist.user.urn).cloned();
+            col.push(get_playlist_widget(playlist, image_handle, |urn| Message::UserPage(UserPageMessage::LoadPlaylist(urn))))
+        });
+
         column![
             row![ if self.track_load_failed { text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)) } else { text("") } ],
-            Scrollable::new(tracks_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
+            row![
+                Scrollable::new(tracks_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
+                Scrollable::new(playlists_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
+            ].spacing(10)  
         ]
         .into()
     }

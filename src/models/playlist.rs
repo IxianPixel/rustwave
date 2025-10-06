@@ -1,26 +1,22 @@
 use serde::{Deserialize, Serialize};
 
-use super::{SoundCloudTrack, SoundCloudUser};
-
-#[derive(Deserialize)]
-pub struct Playlist {
-    //pub duration: u32,
-    pub genre: String,
-    //pub release_day: u32,
-    pub permalink: String,
-    pub title: String,
-}
+use super::{deserialize_null_default,SoundCloudTrack, SoundCloudUser};
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct SoundCloudPlaylist {
-    pub id: u64,
+    pub urn: String,
+    #[serde(deserialize_with = "deserialize_null_default")]
     pub title: String,
     pub playlist_type: Option<String>,
     pub tracks: Vec<SoundCloudTrack>,
     pub user: SoundCloudUser,
+    #[serde(deserialize_with = "deserialize_null_default")]
+    pub artwork_url: String,
+    pub track_count: Option<u32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct SoundCloudPlaylists {
     pub collection: Vec<SoundCloudPlaylist>,
+    pub next_href: Option<String>,
 }

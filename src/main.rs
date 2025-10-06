@@ -55,6 +55,7 @@ enum Message {
     SearchPage(pages::SearchPageMessage),
     FeedPage(pages::FeedPageMessage),
     UserPage(pages::UserPageMessage),
+    PlaylistPage(pages::PlaylistPageMessage),
     PlayPausePlayback,
     SeekForwards,
     SeekBackwards,

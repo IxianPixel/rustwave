@@ -22,6 +22,14 @@ impl TrackListManager {
         }
     }
 
+    pub fn new_with_tracks(tracks: Vec<SoundCloudTrack>) -> Self {
+        Self {
+            tracks,
+            track_images: HashMap::new(),
+            current_track_id: 0,
+        }
+    }
+
     pub fn tracks(&self) -> &Vec<SoundCloudTrack> {
         &self.tracks
     }

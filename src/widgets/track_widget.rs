@@ -17,7 +17,7 @@ where
     if let Some(handle) = image_handle {
         row = row.push(image(handle).width(100).height(100));
     } else {
-        row = row.push(text("Loading image..."));
+        row = row.push(image(get_asset_path("assets/icon.png")).width(100).height(100));
     }
 
     let duration = Duration::from_millis(track.duration);

@@ -1,13 +1,13 @@
 use crate::page_b::PageB;
-use crate::pages::UserPage;
-use crate::widgets::get_user_widget;
+use crate::pages::{PlaylistPage, UserPage};
+use crate::widgets::{get_playlist_widget, get_user_widget};
 use crate::track_list_manager::TrackListManager;
 use crate::{api_helpers, Message, Page};
 use iced::widget::{column, row, text_input, Scrollable};
 use iced::{Length, Task};
 use tracing::debug;
 use crate::auth::TokenManager;
-use crate::models::{SearchResults, SoundCloudTrack, SoundCloudUser};
+use crate::models::{SearchResults, SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser};
 use iced::widget::image::Handle;
 use std::collections::HashMap;
 
@@ -24,6 +24,7 @@ pub enum SearchPageMessage {
     PlayTrack(SoundCloudTrack),
     LikeTrack(SoundCloudTrack),
     LoadUser(String),
+    LoadPlaylist(SoundCloudPlaylist),
 }
 
 type Ms = SearchPageMessage;
@@ -35,6 +36,7 @@ pub struct SearchPage {
     user_images: HashMap<String, Handle>,
     users: Vec<SoundCloudUser>,
     track_list: TrackListManager,
+    playlists: Vec<SoundCloudPlaylist>,
 }
 
 impl SearchPage {
@@ -46,6 +48,7 @@ impl SearchPage {
             user_images: HashMap::new(),
             users: Vec::new(),
             track_list: TrackListManager::new(),
+            playlists: Vec::new(),
         }
     }
 }   
@@ -80,6 +83,7 @@ impl Page for SearchPage {
                     self.token_manager = token_manager;
                     self.user_load_failed = false;
                     self.users = results.users.clone();
+                    self.playlists = results.playlists.clone();
                     self.track_list.set_tracks(results.tracks);
 
                     // Create tasks to load images for all users
@@ -141,6 +145,10 @@ impl Page for SearchPage {
                     let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
                     return (Some(Box::new(user_page)), task);
                 },
+                SearchPageMessage::LoadPlaylist(playlist) => {
+                    let (playlist_page, task) = PlaylistPage::new(self.token_manager.clone(), playlist);
+                    return (Some(Box::new(playlist_page)), task);
+                }
             }
         }
 
@@ -172,6 +180,11 @@ impl Page for SearchPage {
             |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn))
         );
 
+        let playlists_column = self.playlists.iter().fold(column![], |col, playlist| {
+            let image_handle = self.user_images.get(&playlist.user.urn).cloned();
+            col.push(get_playlist_widget(playlist, image_handle, |urn| Message::SearchPage(SearchPageMessage::LoadPlaylist(urn))))
+        });
+
         column![
             row![
                 text_input("Search", self.search_query.as_str())
@@ -181,8 +194,10 @@ impl Page for SearchPage {
             row![
                 users_column
             ].spacing(10),
-            Scrollable::new(tracks_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
-
+            row![
+                Scrollable::new(tracks_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
+                Scrollable::new(playlists_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
+            ].spacing(10),
         ]
         .into()
     }

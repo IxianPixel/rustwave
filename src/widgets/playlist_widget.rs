@@ -1,12 +1,12 @@
-use crate::models::SoundCloudUser;
+use crate::models::SoundCloudPlaylist;
 use crate::Message;
 use iced::widget::{image, image::Handle, container, column};
 use iced::widget::{mouse_area, text, MouseArea, Row};
 use crate::utilities::{get_asset_path, NumberFormat};
 
-pub fn get_user_widget<F>(user: &'_ SoundCloudUser, image_handle: Option<Handle>, load_user: F) -> MouseArea<'_, Message>
+pub fn get_playlist_widget<F>(playlist: &'_ SoundCloudPlaylist, image_handle: Option<Handle>, load_playlist: F) -> MouseArea<'_, Message>
 where
-    F: Fn(String) -> Message + 'static,
+    F: Fn(SoundCloudPlaylist) -> Message + 'static,
 {
     let mut row = Row::new();
 
@@ -19,12 +19,12 @@ where
 
     row = row.push(
         column![
-            text(user.username.clone()).shaping(text::Shaping::Advanced).size(20),
-            text(format!("{} followers", user.followers_count.unwrap_or(0).format_compact_number())).size(20),
+            text(playlist.title.clone()).shaping(text::Shaping::Advanced).size(20),
+            text(format!("{} tracks", playlist.track_count.unwrap_or(0).format_compact_number())).size(20),
         ]
     );
 
     mouse_area(
         container(row.spacing(10).padding(5))
-    ).on_press(load_user(user.urn.clone()))
+    ).on_press(load_playlist(playlist.clone()))
 }

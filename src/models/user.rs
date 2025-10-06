@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{SoundCloudTrack, SoundCloudTracks};
+use crate::models::{SoundCloudPlaylist, SoundCloudTrack, SoundCloudTracks};
 
 use super::deserialize_null_default;
 
@@ -37,5 +37,6 @@ impl Default for SoundCloudUser {
 pub struct SoundCloudUserProfile {
     pub user: SoundCloudUser,
     pub tracks: Vec<SoundCloudTrack>,
+    pub playlists: Vec<SoundCloudPlaylist>,
 }
 

@@ -21,7 +21,7 @@ mod search;
 // Re-exports to maintain the same public API
 pub use activity::{SoundCloudActivity, SoundCloudActivityCollection};
 pub use item::{SoundCloudItem, SoundCloudPrimative};
-pub use playlist::{Playlist, SoundCloudPlaylist, SoundCloudPlaylists};
+pub use playlist::{SoundCloudPlaylist, SoundCloudPlaylists};
 pub use track::{SoundCloudTrack, SoundCloudTracks};
 pub use user::{SoundCloudUser, SoundCloudUsers, SoundCloudUserProfile};
 pub use message::{TrackMessage};

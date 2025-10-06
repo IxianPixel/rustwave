@@ -4,24 +4,9 @@ use tokio::try_join;
 
 use crate::
     models::{
-        SearchResults, SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists, SoundCloudPrimative, SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile, SoundCloudUsers
+        SearchResults, SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists, SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile, SoundCloudUsers
     }
 ;
-
-pub async fn get_playlists(
-    access_token: &AccessToken,
-) -> Result<SoundCloudPrimative, Box<dyn std::error::Error>> {
-    let c = reqwest::Client::new();
-    let r = c
-        .get("https://api.soundcloud.com/me/playlists?limit=50&linked_partitioning=true")
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
-
-    let body = r.json::<SoundCloudPrimative>().await?;
-
-    Ok(body)
-}
 
 pub async fn get_liked_tracks(
     access_token: AccessToken,
@@ -98,9 +83,9 @@ pub async fn search_tracks(
 }
 
 pub async fn search_playlists(
-    access_token: &AccessToken,
+    access_token: AccessToken,
     query: &str,
-) -> Result<Vec<SoundCloudPlaylist>, Box<dyn std::error::Error>> {
+) -> Result<Vec<SoundCloudPlaylist>, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
     let r = c
         .get("https://api.soundcloud.com/playlists")
@@ -150,11 +135,12 @@ pub async fn search(
     access_token: AccessToken,
     query: &str,
 ) -> Result<SearchResults, Box<dyn std::error::Error + Send + Sync>> {
-    let (tracks, users) = try_join!(
+    let (tracks, users, playlists) = try_join!(
         search_tracks(access_token.clone(), query),
-        search_user(access_token.clone(), query)
+        search_user(access_token.clone(), query),
+        search_playlists(access_token.clone(), query)
     )?;
-    Ok(SearchResults { tracks, users })
+    Ok(SearchResults { tracks, users, playlists })
 }
 
 pub async fn get_followed_tracks(
@@ -244,12 +230,38 @@ pub async fn get_user_tracks(
     Ok(body.collection)
 }
 
+pub async fn get_user_playlists(
+    access_token: AccessToken, user_urn: String
+) -> Result<Vec<SoundCloudPlaylist>, Box<dyn std::error::Error + Send + Sync>> {
+    let c = reqwest::Client::new();
+    let response = c
+        .get(format!("https://api.soundcloud.com/users/{}/playlists", user_urn))
+        .query(&[
+            ("access", "playable,blocked"),
+            ("limit", "50"),
+            ("linked_partitioning", "true"),
+        ])
+        .bearer_auth(access_token.secret())
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudPlaylists>().await?;
+    Ok(body.collection)
+}
+
 pub async fn get_user_profile(
     access_token: AccessToken, user_urn: String
 ) -> Result<SoundCloudUserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    let (user, tracks) = try_join!(
+    let (user, tracks, playlists) = try_join!(
         get_user(access_token.clone(), user_urn.clone()),
         get_user_tracks(access_token.clone(), user_urn.clone()),
+        get_user_playlists(access_token.clone(), user_urn.clone()),
     )?;
-    Ok(SoundCloudUserProfile { user, tracks })
+    Ok(SoundCloudUserProfile { user, tracks, playlists })
 }
