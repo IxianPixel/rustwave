@@ -7,7 +7,7 @@ use iced::widget::{image, image::Handle};
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
 use souvlaki::{MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
 
-use crate::{pages::SearchPage, utilities::DurationFormat};
+use crate::{pages::SearchPage, utilities::{DurationFormat, get_asset_path}};
 use crate::queue_manager::QueueManager;
 
 fn main() -> iced::Result {
@@ -566,19 +566,19 @@ impl MyApp {
                             queue,
                             row![
                                 button(
-                                    Svg::new("assets/feed.svg")
+                                    Svg::new(get_asset_path("assets/feed.svg"))
                                     .width(22)
                                     .height(22)
                                     .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
                                 ).on_press(Message::NavigateToFeed),
                                 button(
-                                    Svg::new("assets/heart.svg")
+                                    Svg::new(get_asset_path("assets/heart.svg"))
                                     .width(22)
                                     .height(22)
                                     .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
                                 ).on_press(Message::NavigateToLikes),
                                 button(
-                                    Svg::new("assets/search.svg")
+                                    Svg::new(get_asset_path("assets/search.svg"))
                                     .width(22)
                                     .height(22)
                                     .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),

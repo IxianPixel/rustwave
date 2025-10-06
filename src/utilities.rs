@@ -1,4 +1,5 @@
 use std::time::Duration;
+use std::path::PathBuf;
 
 use iced::widget::{image, image::Handle, container, column, row};
 use iced::widget::{button, mouse_area, svg, text, MouseArea, Row, Svg};
@@ -85,3 +86,19 @@ macro_rules! impl_number_format {
 }
 
 impl_number_format!(u32, u64);
+
+/// Get the path to an asset file relative to the executable location
+/// This works both in development (cargo run) and in the app bundle
+pub fn get_asset_path(relative_path: &str) -> String {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let asset_path = exe_dir.join(relative_path);
+            if asset_path.exists() {
+                return asset_path.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    // Fallback to relative path for development
+    relative_path.to_string()
+}

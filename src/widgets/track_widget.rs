@@ -4,7 +4,7 @@ use iced::widget::{button, mouse_area, svg, text, MouseArea, Row, Svg};
 use iced::Color;
 use crate::page_b;
 use crate::Message;
-use crate::utilities::{DurationFormat, NumberFormat};
+use crate::utilities::{DurationFormat, NumberFormat, get_asset_path};
 use std::time::Duration;
 
 pub fn get_track_widget<F, U>(track: &'_ SoundCloudTrack, image_handle: Option<Handle>, on_play: F, on_user: U) -> MouseArea<'_, Message>
@@ -37,19 +37,19 @@ where
             text(duration.format_as_mmss()),
             row![
                 button(row![
-                    Svg::new("assets/heart.svg")
+                    Svg::new(get_asset_path("assets/heart.svg"))
                         .width(20)
                         .height(20)
                         .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
                     text(track.favoritings_count.unwrap_or(0).format_compact_number()).color(Color::from_rgb(1.0, 1.0, 1.0)),
                 ]).on_press(Message::PageB(page_b::PageBMessage::LikeTrack(track.clone()))),
                 button(row![
-                    Svg::new("assets/repost.svg").width(20).height(20)
+                    Svg::new(get_asset_path("assets/repost.svg")).width(20).height(20)
                         .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
                     text(track.reposts_count.unwrap_or(0).format_compact_number()).color(Color::from_rgb(1.0, 1.0, 1.0)),
                 ]).on_press(on_play(track.clone())),
                 button(row![
-                    Svg::new("assets/play.svg").width(20).height(20)
+                    Svg::new(get_asset_path("assets/play.svg")).width(20).height(20)
                         .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
                     text(track.playback_count.unwrap_or(0).format_compact_number()).color(Color::from_rgb(1.0, 1.0, 1.0)),
                 ]).on_press(on_play(track.clone())),
