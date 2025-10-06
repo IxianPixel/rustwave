@@ -296,7 +296,7 @@ pub async fn authenticate() -> Result<TokenManager, AuthError> {
 
     let (code, _state) = {
         // A very naive implementation of the redirect server.
-        let listener = TcpListener::bind("127.0.0.1:5000").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:32857").unwrap();
 
         // The server will terminate itself after collecting the first code.
         let Some(mut stream) = listener.incoming().flatten().next() else {

@@ -47,7 +47,7 @@ lazy_static! {
     
     pub static ref REDIRECT_URL: String = {
         load_dotenv();
-        env::var("REDIRECT_URL").unwrap_or_else(|_| "http://localhost:5000/".to_string())
+        env::var("REDIRECT_URL").unwrap_or_else(|_| "http://localhost:32857/".to_string())
     };
 }
 
