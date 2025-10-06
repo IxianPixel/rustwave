@@ -49,6 +49,13 @@ jobs:
     - name: Build release binary
       run: cargo build --release
 
+    - name: Extract version from Cargo.toml
+      id: version
+      run: |
+        VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "Version: $VERSION"
+
     - name: Create app bundle structure
       run: |
         mkdir -p Rustwave.app/Contents/MacOS
@@ -79,9 +86,9 @@ jobs:
             <key>CFBundleDisplayName</key>
             <string>Rustwave</string>
             <key>CFBundleVersion</key>
-            <string>0.1.0</string>
+            <string>${{ env.VERSION }}</string>
             <key>CFBundleShortVersionString</key>
-            <string>0.1.0</string>
+            <string>${{ env.VERSION }}</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleSignature</key>

@@ -6,6 +6,10 @@ set -e
 
 echo "Building Rustwave macOS app bundle..."
 
+# Extract version from Cargo.toml
+VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
+echo "Version: $VERSION"
+
 # Clean previous build
 rm -rf Rustwave.app
 
@@ -54,9 +58,9 @@ cat > Rustwave.app/Contents/Info.plist << 'EOF'
     <key>CFBundleDisplayName</key>
     <string>Rustwave</string>
     <key>CFBundleVersion</key>
-    <string>0.1.0</string>
+    <string>$VERSION</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>$VERSION</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
