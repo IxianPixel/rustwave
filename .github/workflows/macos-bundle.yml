@@ -11,6 +11,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: ""
 
 jobs:
   build-macos:
@@ -45,12 +46,83 @@ jobs:
         REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
         EOF
 
-    - name: Build macOS app bundle
-      run: chmod +x build_app.sh && ./build_app.sh
+    - name: Build release binary
+      run: cargo build --release
+
+    - name: Create app bundle structure
+      run: |
+        mkdir -p Rustwave.app/Contents/MacOS
+        mkdir -p Rustwave.app/Contents/Resources
+
+    - name: Copy executable
+      run: cp target/release/rustwave Rustwave.app/Contents/MacOS/
+
+    - name: Copy .env file
+      run: cp .env Rustwave.app/Contents/MacOS/
+
+    - name: Copy assets folder
+      run: cp -r assets Rustwave.app/Contents/MacOS/
+
+    - name: Create Info.plist
+      run: |
+        cat > Rustwave.app/Contents/Info.plist << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>rustwave</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.rustwave.app</string>
+            <key>CFBundleName</key>
+            <string>Rustwave</string>
+            <key>CFBundleDisplayName</key>
+            <string>Rustwave</string>
+            <key>CFBundleVersion</key>
+            <string>0.1.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.1.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleSignature</key>
+            <string>????</string>
+            <key>CFBundleIconFile</key>
+            <string>AppIcon</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.12</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+            <key>NSSupportsAutomaticGraphicsSwitching</key>
+            <true/>
+        </dict>
+        </plist>
+        EOF
+
+    - name: Create icon set
+      run: |
+        mkdir -p AppIcon.iconset
+        sips -z 16 16 assets/icon.png --out AppIcon.iconset/icon_16x16.png
+        sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_16x16@2x.png
+        sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_32x32.png
+        sips -z 64 64 assets/icon.png --out AppIcon.iconset/icon_32x32@2x.png
+        sips -z 128 128 assets/icon.png --out AppIcon.iconset/icon_128x128.png
+        sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_128x128@2x.png
+        sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_256x256.png
+        sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_256x256@2x.png
+        sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_512x512.png
+        cp assets/icon.png AppIcon.iconset/icon_512x512@2x.png
+
+    - name: Convert iconset to icns
+      run: iconutil -c icns AppIcon.iconset
+
+    - name: Copy icon to app bundle
+      run: cp AppIcon.icns Rustwave.app/Contents/Resources/
+
+    - name: Make executable
+      run: chmod +x Rustwave.app/Contents/MacOS/rustwave
 
     - name: Create archive
-      run: |
-        ditto -c -k --keepParent Rustwave.app Rustwave.app.zip
+      run: ditto -c -k --keepParent Rustwave.app Rustwave.app.zip
 
     - name: Upload app bundle
       uses: actions/upload-artifact@v4
