@@ -6,6 +6,7 @@ use iced::widget::{button, mouse_area, svg, text, MouseArea, Row, Svg};
 use iced::Color;
 use crate::models::SoundCloudUser;
 use crate::{models::SoundCloudTrack, page_b, Message};
+use ::image::load_from_memory;
 
 pub trait DurationFormat {
     fn format_as_mmss(&self) -> String;
@@ -25,6 +26,64 @@ pub async fn download_image(url: &str) -> Result<Handle, Box<dyn std::error::Err
     let response = reqwest::get(url).await?;
     let bytes = response.bytes().await?;
     Ok(Handle::from_bytes(bytes))
+}
+
+/// Downloads waveform image and returns raw bytes for peak extraction
+pub async fn download_waveform_bytes(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    let response = reqwest::get(url).await?;
+    let bytes = response.bytes().await?;
+    Ok(bytes.to_vec())
+}
+
+/// Extract peak data from waveform PNG for canvas rendering
+pub fn extract_waveform_peaks(waveform_bytes: &[u8], target_width: usize) -> Result<Vec<f32>, Box<dyn std::error::Error + Send + Sync>> {
+    // Load the waveform image
+    let img = load_from_memory(waveform_bytes)?;
+    let rgba_img = img.to_rgba8();
+
+    let width = rgba_img.width() as usize;
+    let height = rgba_img.height() as usize;
+
+    if width == 0 || height == 0 {
+        return Ok(vec![0.0; target_width]);
+    }
+
+    let samples_per_peak = width / target_width.max(1);
+    let mut peaks = Vec::with_capacity(target_width);
+
+    // For each vertical slice, find the maximum height of non-transparent pixels
+    for chunk_idx in 0..target_width {
+        let start_x = chunk_idx * samples_per_peak;
+        let end_x = (start_x + samples_per_peak).min(width);
+
+        let mut max_extent = 0.0f32;
+
+        // For this horizontal range, check all columns
+        for x in start_x..end_x {
+            // Find the extent of transparent pixels in this column (waveform shape)
+            let mut top = height;
+            let mut bottom = 0;
+
+            for y in 0..height {
+                let pixel = rgba_img.get_pixel(x as u32, y as u32);
+                // SoundCloud waveforms have transparent shapes on white/opaque background
+                // Check if pixel is transparent (low alpha - is part of waveform)
+                if pixel[3] < 50 {
+                    top = top.min(y);
+                    bottom = bottom.max(y);
+                }
+            }
+
+            if bottom > top {
+                let extent = (bottom - top) as f32 / height as f32;
+                max_extent = max_extent.max(extent);
+            }
+        }
+
+        peaks.push(max_extent);
+    }
+
+    Ok(peaks)
 }
 
 pub fn get_track_queue(track_id: u64, tracks: Vec<SoundCloudTrack>) -> Vec<SoundCloudTrack> {

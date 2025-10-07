@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{deserialize_null_default, SoundCloudUser};
+use super::{SoundCloudUser, deserialize_null_default};
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct SoundCloudTracks {
@@ -22,4 +22,6 @@ pub struct SoundCloudTrack {
     pub reposts_count: Option<u32>,
     #[serde(deserialize_with = "deserialize_null_default")]
     pub artwork_url: String,
+    #[serde(deserialize_with = "deserialize_null_default")]
+    pub waveform_url: String,
 }

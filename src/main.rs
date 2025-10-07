@@ -1,14 +1,23 @@
-use std::{io::Cursor, time::Duration, sync::mpsc};
+use std::{io::Cursor, sync::mpsc, time::Duration};
 
-use iced::{
-    alignment::Vertical, event::{self, Status}, keyboard::{key::Named, Event::KeyPressed, Key}, time, widget::{button, column, container, horizontal_rule, row, slider, svg, text, Space, Svg}, window, Color, Event, Length, Subscription, Task
+use crate::queue_manager::QueueManager;
+use crate::{
+    pages::SearchPage,
+    utilities::{DurationFormat, get_asset_path},
 };
 use iced::widget::{image, image::Handle};
+use iced::{
+    Color, Event, Length, Subscription, Task,
+    alignment::Vertical,
+    event::{self, Status},
+    keyboard::{Event::KeyPressed, Key, key::Named},
+    time,
+    widget::{Space, Svg, button, column, container, horizontal_rule, row, slider, svg, text},
+    window,
+};
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
 use souvlaki::{MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
-
-use crate::{pages::SearchPage, utilities::{DurationFormat, get_asset_path}};
-use crate::queue_manager::QueueManager;
+use tracing::debug;
 
 fn main() -> iced::Result {
     // Only initialize tracing in debug builds, filtered to only rustwave logs
@@ -18,10 +27,7 @@ fn main() -> iced::Result {
         .init();
 
     // Load the application icon
-    let icon = window::icon::from_file_data(
-        include_bytes!("../assets/icon.png"),
-        None,
-    ).ok();
+    let icon = window::icon::from_file_data(include_bytes!("../assets/icon.png"), None).ok();
 
     iced::application("Rustwave", MyApp::update, MyApp::view)
         .theme(|_| iced::Theme::CatppuccinMocha)
@@ -33,18 +39,18 @@ fn main() -> iced::Result {
         .run_with(MyApp::new)
 }
 
-mod page_b;
 mod auth_page;
-mod constants;
 mod config;
+mod constants;
 mod models;
-mod soundcloud;
-mod utilities;
-mod queue_manager;
-mod stream_manager;
+mod page_b;
 mod pages;
-mod widgets;
+mod queue_manager;
+mod soundcloud;
+mod stream_manager;
 mod track_list_manager;
+mod utilities;
+mod widgets;
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -65,8 +71,17 @@ enum Message {
     NextTrack,
     PreviousTrack,
     TrackEnded,
-    StartQueue(crate::models::SoundCloudTrack, Vec<crate::models::SoundCloudTrack>, crate::soundcloud::TokenManager),
-    QueueStreamDownloaded(tokio_util::bytes::Bytes, Option<Handle>, crate::soundcloud::TokenManager),
+    StartQueue(
+        crate::models::SoundCloudTrack,
+        Vec<crate::models::SoundCloudTrack>,
+        crate::soundcloud::TokenManager,
+    ),
+    QueueStreamDownloaded(
+        tokio_util::bytes::Bytes,
+        Option<Handle>,
+        Option<Vec<f32>>,
+        crate::soundcloud::TokenManager,
+    ),
     QueueStreamFailed(String, crate::soundcloud::TokenManager),
     NavigateToSearch,
     NavigateToLikes,
@@ -83,6 +98,7 @@ struct MyApp {
     title: String,
     user: String,
     artwork: Option<Handle>,
+    waveform_peaks: Option<Vec<f32>>, // Peak data for canvas rendering
     stream_loading: bool,
     stream: OutputStream,
     sink: Sink,
@@ -99,7 +115,11 @@ struct MyApp {
 
 impl MyApp {
     // Helper method to start downloading and playing a track
-    fn start_track_download(&mut self, track: &crate::models::SoundCloudTrack, token_manager: crate::soundcloud::TokenManager) -> Task<Message> {
+    fn start_track_download(
+        &mut self,
+        track: &crate::models::SoundCloudTrack,
+        token_manager: crate::soundcloud::TokenManager,
+    ) -> Task<Message> {
         if track.stream_url.is_none() {
             return Task::none();
         }
@@ -113,14 +133,19 @@ impl MyApp {
 
         let track_clone = track.clone();
         Task::perform(
-            async move { crate::stream_manager::download_track_stream(token_manager, &track_clone).await },
+            async move {
+                crate::stream_manager::download_track_stream(token_manager, &track_clone).await
+            },
             |result| match result {
-                Ok((track_data, image_handle, token_manager)) => {
-                    Message::QueueStreamDownloaded(track_data, image_handle, token_manager)
+                Ok((track_data, image_handle, waveform_peaks, token_manager)) => {
+                    Message::QueueStreamDownloaded(
+                        track_data,
+                        image_handle,
+                        waveform_peaks,
+                        token_manager,
+                    )
                 }
-                Err((error, token_manager)) => {
-                    Message::QueueStreamFailed(error, token_manager)
-                }
+                Err((error, token_manager)) => Message::QueueStreamFailed(error, token_manager),
             },
         )
     }
@@ -139,27 +164,27 @@ impl MyApp {
             Ok(_) => {
                 self.track_position = new_position;
                 true
-            },
+            }
             Err(_) => {
                 // Advanced workaround: recreate the audio source and seek forward
                 if let Some(ref track_data) = self.current_track_data {
                     // Remember if we were paused
                     let was_paused = self.sink.is_paused();
-                    
+
                     // Recreate the sink and source
                     self.sink = Sink::connect_new(self.stream.mixer());
-                    
+
                     match Decoder::new(Cursor::new(track_data.clone())) {
                         Ok(source) => {
                             self.sink.clear();
                             self.sink.append(source);
-                            
+
                             // If we want to seek to a position > 0, do forward seek
                             if new_position > Duration::from_secs(0) {
                                 match self.sink.try_seek(new_position) {
                                     Ok(_) => {
                                         self.track_position = new_position;
-                                        
+
                                         // Restore play/pause state
                                         if was_paused {
                                             self.sink.pause();
@@ -167,12 +192,12 @@ impl MyApp {
                                             self.sink.play();
                                         }
                                         true
-                                    },
+                                    }
                                     Err(_) => false,
                                 }
                             } else {
                                 self.track_position = Duration::from_secs(0);
-                                
+
                                 // Restore play/pause state
                                 if was_paused {
                                     self.sink.pause();
@@ -181,7 +206,7 @@ impl MyApp {
                                 }
                                 true
                             }
-                        },
+                        }
                         Err(_) => false,
                     }
                 } else {
@@ -195,7 +220,7 @@ impl MyApp {
         let stream = OutputStreamBuilder::open_default_stream()
             .expect("Failed to open default audio output stream");
         let sink = Sink::connect_new(stream.mixer());
-        
+
         // Initialize media controls with channel
         let (sender, receiver) = mpsc::channel();
         let hwnd = None; // For Windows, you might need to get the window handle
@@ -204,21 +229,24 @@ impl MyApp {
             display_name: "Rustwave",
             hwnd,
         };
-        
-        let mut media_controls = MediaControls::new(config)
-            .expect("Failed to initialize media controls");
-            
+
+        let mut media_controls =
+            MediaControls::new(config).expect("Failed to initialize media controls");
+
         // Attach the event handler
-        media_controls.attach(move |event| {
-            let _ = sender.send(event);
-        }).expect("Failed to attach media controls event handler");
-        
+        media_controls
+            .attach(move |event| {
+                let _ = sender.send(event);
+            })
+            .expect("Failed to attach media controls event handler");
+
         (
             Self {
                 page: Box::new(auth_page::AuthPage::new()),
                 title: "Nothing".to_string(),
                 user: "Nothing".to_string(),
                 artwork: None,
+                waveform_peaks: None,
                 stream_loading: false,
                 stream,
                 sink,
@@ -247,27 +275,34 @@ impl MyApp {
             Message::StartQueue(track, tracks, token_manager) => {
                 // Store the token manager for future queue operations
                 self.token_manager = Some(token_manager.clone());
-                
+
                 // Initialize the queue starting from the selected track
                 self.queue_manager.start_queue_from_track(track.id, tracks);
-                
+
                 // Start playing the first track in the queue
                 if let Some(current_track) = self.queue_manager.current_track().cloned() {
                     self.start_track_download(&current_track, token_manager)
                 } else {
                     Task::none()
                 }
-            },
+            }
             Message::PageB(page_b::PageBMessage::PlayTrack(_track)) => {
                 // This will be handled by the page to convert to StartQueue message
                 Task::none()
-            },
-            Message::QueueStreamDownloaded(track_data, image_handle, token_manager) => {
+            }
+            Message::QueueStreamDownloaded(
+                track_data,
+                image_handle,
+                waveform_peaks,
+                token_manager,
+            ) => {
                 // Update stored token manager
                 self.token_manager = Some(token_manager);
                 // Store the track data for potential backward seeking workaround
                 self.current_track_data = Some(track_data.to_vec());
-                
+                // Store waveform peak data
+                self.waveform_peaks = waveform_peaks;
+
                 // Recreate a fresh Sink on our existing, long-lived stream's mixer
                 self.sink = Sink::connect_new(self.stream.mixer());
 
@@ -276,7 +311,7 @@ impl MyApp {
                     Err(e) => {
                         eprintln!("Failed to create decoder: {e}");
                         self.pending_stream_download = false;
-                        return Task::none()
+                        return Task::none();
                     }
                 };
                 self.sink.clear();
@@ -285,7 +320,7 @@ impl MyApp {
                 self.stream_loading = false;
                 self.pending_stream_download = false;
                 self.artwork = image_handle;
-                
+
                 // Update media controls metadata
                 let metadata = MediaMetadata {
                     title: Some(&self.title),
@@ -295,11 +330,11 @@ impl MyApp {
                     duration: Some(self.track_duration),
                 };
                 let _ = self.media_controls.set_metadata(metadata);
-                let _ = self.media_controls.set_playback(MediaPlayback::Playing { 
-                    progress: Some(souvlaki::MediaPosition(Duration::from_secs(0))) 
+                let _ = self.media_controls.set_playback(MediaPlayback::Playing {
+                    progress: Some(souvlaki::MediaPosition(Duration::from_secs(0))),
                 });
                 Task::none()
-            },
+            }
             Message::QueueStreamFailed(error, token_manager) => {
                 eprintln!("Failed to download stream: {}", error);
                 self.stream_loading = false;
@@ -307,27 +342,36 @@ impl MyApp {
                 // Update stored token manager
                 self.token_manager = Some(token_manager);
                 Task::none()
-            },
-            Message::PageB(page_b::PageBMessage::StreamDownloadedWithToken(track_data, image_handle, token_manager)) => {
+            }
+            Message::PageB(page_b::PageBMessage::StreamDownloadedWithToken(
+                track_data,
+                image_handle,
+                token_manager,
+            )) => {
                 // Legacy handler - redirect to new queue system
-                Task::done(Message::QueueStreamDownloaded(track_data, image_handle, token_manager))
-            },
+                Task::done(Message::QueueStreamDownloaded(
+                    track_data,
+                    image_handle,
+                    None,
+                    token_manager,
+                ))
+            }
             Message::PlayPausePlayback => {
                 if !self.sink.empty() {
                     if self.sink.is_paused() {
                         self.sink.play();
-                        let _ = self.media_controls.set_playback(MediaPlayback::Playing { 
-                            progress: Some(souvlaki::MediaPosition(self.track_position)) 
+                        let _ = self.media_controls.set_playback(MediaPlayback::Playing {
+                            progress: Some(souvlaki::MediaPosition(self.track_position)),
                         });
                     } else {
                         self.sink.pause();
-                        let _ = self.media_controls.set_playback(MediaPlayback::Paused { 
-                            progress: Some(souvlaki::MediaPosition(self.track_position)) 
+                        let _ = self.media_controls.set_playback(MediaPlayback::Paused {
+                            progress: Some(souvlaki::MediaPosition(self.track_position)),
                         });
                     }
                 }
                 Task::none()
-            },
+            }
             Message::SeekForwards => {
                 if !self.sink.empty() {
                     let seek_limit = Duration::from_secs(10);
@@ -337,45 +381,55 @@ impl MyApp {
                     let _ = self.sink.try_seek(new_position);
                 }
                 Task::none()
-            },
+            }
             Message::SeekBackwards => {
                 let seek_limit = Duration::from_secs(10);
                 self.seek_backward(seek_limit);
                 Task::none()
-            },
+            }
             Message::UiTick => {
                 // Check for media control events
                 if let Ok(event) = self.media_event_receiver.try_recv() {
                     // Process the media control event
                     return Task::done(Message::MediaControlEvent(event));
                 }
-                
+
                 if !self.sink.empty() {
                     let new_position = self.sink.get_pos();
                     self.track_position = new_position;
 
-                    self.progress_bar_value = (new_position.as_secs_f32() / self.track_duration.as_secs_f32()) * 100.0;
-                    
+                    self.progress_bar_value =
+                        (new_position.as_secs_f32() / self.track_duration.as_secs_f32()) * 100.0;
+
                     // Check if track has ended (reached the end or very close to it)
-                    if new_position >= self.track_duration.saturating_sub(Duration::from_millis(500)) && !self.pending_stream_download {
+                    if new_position
+                        >= self
+                            .track_duration
+                            .saturating_sub(Duration::from_millis(500))
+                        && !self.pending_stream_download
+                    {
                         return Task::done(Message::TrackEnded);
                     }
-                    
+
                     // Update media controls with current position
                     let playback_state = if self.sink.is_paused() {
-                        MediaPlayback::Paused { progress: Some(souvlaki::MediaPosition(self.track_position)) }
+                        MediaPlayback::Paused {
+                            progress: Some(souvlaki::MediaPosition(self.track_position)),
+                        }
                     } else {
-                        MediaPlayback::Playing { progress: Some(souvlaki::MediaPosition(self.track_position)) }
+                        MediaPlayback::Playing {
+                            progress: Some(souvlaki::MediaPosition(self.track_position)),
+                        }
                     };
                     let _ = self.media_controls.set_playback(playback_state);
                 }
                 Task::none()
-            },
+            }
             Message::SeekToPosition(percent) => {
                 if !self.sink.empty() {
                     let new_position = self.track_duration.mul_f32(percent / 100.0);
                     let current_position = self.sink.get_pos();
-                    
+
                     // Determine if this is forward or backward seeking
                     if new_position < current_position {
                         // Backward seeking - use our unified function
@@ -389,7 +443,7 @@ impl MyApp {
                             Ok(_) => {
                                 self.track_position = new_position;
                                 self.progress_bar_value = percent;
-                            },
+                            }
                             Err(_) => {
                                 // Forward seek failed, don't update UI
                             }
@@ -403,23 +457,31 @@ impl MyApp {
                     souvlaki::MediaControlEvent::Play => {
                         if !self.sink.empty() && self.sink.is_paused() {
                             self.sink.play();
-                            let _ = self.media_controls.set_playback(MediaPlayback::Playing { progress: Some(souvlaki::MediaPosition(self.track_position)) });
+                            let _ = self.media_controls.set_playback(MediaPlayback::Playing {
+                                progress: Some(souvlaki::MediaPosition(self.track_position)),
+                            });
                         }
                     }
                     souvlaki::MediaControlEvent::Pause => {
                         if !self.sink.empty() && !self.sink.is_paused() {
                             self.sink.pause();
-                            let _ = self.media_controls.set_playback(MediaPlayback::Paused { progress: Some(souvlaki::MediaPosition(self.track_position)) });
+                            let _ = self.media_controls.set_playback(MediaPlayback::Paused {
+                                progress: Some(souvlaki::MediaPosition(self.track_position)),
+                            });
                         }
                     }
                     souvlaki::MediaControlEvent::Toggle => {
                         if !self.sink.empty() {
                             if self.sink.is_paused() {
                                 self.sink.play();
-                                let _ = self.media_controls.set_playback(MediaPlayback::Playing { progress: Some(souvlaki::MediaPosition(self.track_position)) });
+                                let _ = self.media_controls.set_playback(MediaPlayback::Playing {
+                                    progress: Some(souvlaki::MediaPosition(self.track_position)),
+                                });
                             } else {
                                 self.sink.pause();
-                                let _ = self.media_controls.set_playback(MediaPlayback::Paused { progress: Some(souvlaki::MediaPosition(self.track_position)) });
+                                let _ = self.media_controls.set_playback(MediaPlayback::Paused {
+                                    progress: Some(souvlaki::MediaPosition(self.track_position)),
+                                });
                             }
                         }
                     }
@@ -429,20 +491,18 @@ impl MyApp {
                     souvlaki::MediaControlEvent::Previous => {
                         return self.update(Message::PreviousTrack);
                     }
-                    souvlaki::MediaControlEvent::SeekBy(direction, offset) => {
-                        match direction {
-                            souvlaki::SeekDirection::Forward => {
-                                if !self.sink.empty() {
-                                    let cur_pos = self.sink.get_pos();
-                                    let new_position = cur_pos + offset;
-                                    let _ = self.sink.try_seek(new_position);
-                                }
-                            },
-                            souvlaki::SeekDirection::Backward => {
-                                self.seek_backward(offset);
+                    souvlaki::MediaControlEvent::SeekBy(direction, offset) => match direction {
+                        souvlaki::SeekDirection::Forward => {
+                            if !self.sink.empty() {
+                                let cur_pos = self.sink.get_pos();
+                                let new_position = cur_pos + offset;
+                                let _ = self.sink.try_seek(new_position);
                             }
                         }
-                    }
+                        souvlaki::SeekDirection::Backward => {
+                            self.seek_backward(offset);
+                        }
+                    },
                     souvlaki::MediaControlEvent::SetPosition(position) => {
                         if !self.sink.empty() {
                             let _ = self.sink.try_seek(position.0);
@@ -463,7 +523,7 @@ impl MyApp {
                 } else {
                     Task::none()
                 }
-            },
+            }
             Message::PreviousTrack => {
                 if let Some(prev_track) = self.queue_manager.previous_track().cloned() {
                     if let Some(token_manager) = self.token_manager.clone() {
@@ -475,7 +535,7 @@ impl MyApp {
                 } else {
                     Task::none()
                 }
-            },
+            }
             Message::TrackEnded => {
                 // Automatically play next track when current track ends
                 if self.queue_manager.has_next() {
@@ -486,14 +546,14 @@ impl MyApp {
                     let _ = self.media_controls.set_playback(MediaPlayback::Stopped);
                     Task::none()
                 }
-            },
-            _ => Task::none()
+            }
+            _ => Task::none(),
         };
 
         // Combine both tasks
         Task::batch([page_task, app_task])
     }
-    
+
     fn subscription(&self) -> iced::Subscription<Message> {
         let keyboard_listerer = event::listen_with(|event, status, _| match (event, status) {
             (
@@ -525,7 +585,6 @@ impl MyApp {
             time::every(Duration::from_millis(100)).map(|_| Message::UiTick), // More frequent for media control responsiveness
         ])
     }
-        
 
     fn view(&self) -> iced::Element<Message> {
         let image = if self.artwork.is_some() {
@@ -535,73 +594,103 @@ impl MyApp {
         };
 
         let queue = if let Some(current_pos) = self.queue_manager.current_position() {
-            text(format!("Queue: {} of {}", current_pos + 1, self.queue_manager.queue_length()))
+            text(format!(
+                "Queue: {} of {}",
+                current_pos + 1,
+                self.queue_manager.queue_length()
+            ))
         } else {
             text("Queue: Empty")
         };
 
         column![
-            container(
-                row![
-                    image,
+            container(row![
+                image,
+                column![
+                    text("Playback").size(24),
+                    if self.stream_loading {
+                        text("Loading stream...")
+                    } else {
+                        text(format!("Now Playing: {}", self.title))
+                            .shaping(text::Shaping::Advanced)
+                    },
+                    text(format!("User: {}", self.user)).shaping(text::Shaping::Advanced),
+                    text(format!(
+                        "{} / {}",
+                        self.track_position.format_as_mmss(),
+                        self.track_duration.format_as_mmss()
+                    )),
+                ]
+                .padding(5),
+                Space::with_width(Length::Fill),
+                container(
                     column![
-                        text("Playback").size(24),
-                        if self.stream_loading { text("Loading stream...") } else { text(format!("Now Playing: {}", self.title)).shaping(text::Shaping::Advanced) },
-                        text(format!("User: {}", self.user)).shaping(text::Shaping::Advanced),
-                        text(format!("{} / {}", self.track_position.format_as_mmss(), self.track_duration.format_as_mmss())),
-                        
-                    ]
-                    .padding(5),
-                    Space::with_width(Length::Fill),
-                    container(
-                        column![
-                            row![
-                                button("Previous")
-                                    .on_press(Message::PreviousTrack),
-                                button("Play/Pause").on_press(Message::PlayPausePlayback),
-                                button("Next")
-                                    .on_press(Message::NextTrack),
-                            ].spacing(5),
-                            queue,
-                            row![
-                                button(
-                                    Svg::new(get_asset_path("assets/feed.svg"))
-                                    .width(22)
-                                    .height(22)
-                                    .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
-                                ).on_press(Message::NavigateToFeed),
-                                button(
-                                    Svg::new(get_asset_path("assets/heart.svg"))
-                                    .width(22)
-                                    .height(22)
-                                    .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
-                                ).on_press(Message::NavigateToLikes),
-                                button(
-                                    Svg::new(get_asset_path("assets/search.svg"))
-                                    .width(22)
-                                    .height(22)
-                                    .style(|_theme, _status| svg::Style { color: Some(Color::from_rgb(1.0, 1.0, 1.0)), ..Default::default() }),
-                                ).on_press(Message::NavigateToSearch),
-                            ].spacing(5),
+                        row![
+                            button("Previous").on_press(Message::PreviousTrack),
+                            button("Play/Pause").on_press(Message::PlayPausePlayback),
+                            button("Next").on_press(Message::NextTrack),
                         ]
-                        .spacing(5)
-                        .padding(5)
-                    ),
-                ],
-            ).align_y(Vertical::Center),
+                        .spacing(5),
+                        queue,
+                        row![
+                            button(
+                                Svg::new(get_asset_path("assets/feed.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                        ..Default::default()
+                                    }),
+                            )
+                            .on_press(Message::NavigateToFeed),
+                            button(
+                                Svg::new(get_asset_path("assets/heart.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                        ..Default::default()
+                                    }),
+                            )
+                            .on_press(Message::NavigateToLikes),
+                            button(
+                                Svg::new(get_asset_path("assets/search.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                        ..Default::default()
+                                    }),
+                            )
+                            .on_press(Message::NavigateToSearch),
+                        ]
+                        .spacing(5),
+                    ]
+                    .spacing(5)
+                    .padding(5)
+                ),
+            ],)
+            .align_y(Vertical::Center),
             row![
-                slider(0.0..=100.0, self.progress_bar_value, Message::SeekToPosition)
-                    .width(Length::Fill)
-                    .step(0.1),
+                slider(
+                    0.0..=100.0,
+                    self.progress_bar_value,
+                    Message::SeekToPosition
+                )
+                .width(Length::Fill)
+                .step(0.1),
             ]
             .padding(5),
+            row![widgets::get_waveform_widget(
+                self.waveform_peaks.clone(),
+                self.progress_bar_value / 100.0,
+            ),]
+            .padding(5),
             horizontal_rule(20.0),
-            container(
-                self.page.view()
-            )
-            .padding(5)
-            .width(Length::Fill)
-            .height(Length::FillPortion(1)),
+            container(self.page.view())
+                .padding(5)
+                .width(Length::Fill)
+                .height(Length::FillPortion(1)),
         ]
         .into()
     }
