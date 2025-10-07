@@ -2,7 +2,7 @@ use crate::{page_b::PageB, Message, Page};
 use iced::widget::{button, column, text};
 use iced::Task;
 use tracing::info;
-use crate::auth;
+use crate::soundcloud::auth;
 
 #[derive(Debug, Clone)]
 pub enum AuthPageMessage {

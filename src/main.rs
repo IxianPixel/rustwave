@@ -35,8 +35,6 @@ fn main() -> iced::Result {
 
 mod page_b;
 mod auth_page;
-mod auth;
-mod api_helpers;
 mod constants;
 mod config;
 mod models;
@@ -67,9 +65,9 @@ enum Message {
     NextTrack,
     PreviousTrack,
     TrackEnded,
-    StartQueue(crate::models::SoundCloudTrack, Vec<crate::models::SoundCloudTrack>, crate::auth::TokenManager),
-    QueueStreamDownloaded(tokio_util::bytes::Bytes, Option<Handle>, crate::auth::TokenManager),
-    QueueStreamFailed(String, crate::auth::TokenManager),
+    StartQueue(crate::models::SoundCloudTrack, Vec<crate::models::SoundCloudTrack>, crate::soundcloud::TokenManager),
+    QueueStreamDownloaded(tokio_util::bytes::Bytes, Option<Handle>, crate::soundcloud::TokenManager),
+    QueueStreamFailed(String, crate::soundcloud::TokenManager),
     NavigateToSearch,
     NavigateToLikes,
     NavigateToFeed,
@@ -96,12 +94,12 @@ struct MyApp {
     current_track_data: Option<Vec<u8>>, // Store the current track data for backward seeking
     queue_manager: QueueManager,
     pending_stream_download: bool, // Flag to track if we're downloading the next track
-    token_manager: Option<crate::auth::TokenManager>, // Store token manager for queue operations
+    token_manager: Option<crate::soundcloud::TokenManager>, // Store token manager for queue operations
 }
 
 impl MyApp {
     // Helper method to start downloading and playing a track
-    fn start_track_download(&mut self, track: &crate::models::SoundCloudTrack, token_manager: crate::auth::TokenManager) -> Task<Message> {
+    fn start_track_download(&mut self, track: &crate::models::SoundCloudTrack, token_manager: crate::soundcloud::TokenManager) -> Task<Message> {
         if track.stream_url.is_none() {
             return Task::none();
         }

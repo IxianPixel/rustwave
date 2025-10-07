@@ -1,5 +1,5 @@
 use crate::Page;
-use crate::auth::TokenManager;
+use crate::soundcloud::TokenManager;
 use crate::models::SoundCloudPlaylist;
 use crate::models::SoundCloudTrack;
 use crate::page_b::PageB;
@@ -7,7 +7,8 @@ use crate::pages::UserPage;
 use crate::pages::{FeedPage, SearchPage};
 use crate::track_list_manager::TrackListManager;
 use crate::widgets::get_playlist_widget;
-use crate::{Message, api_helpers};
+use crate::Message;
+use crate::soundcloud::api_helpers;
 use iced::Color;
 use iced::Length;
 use iced::Task;

@@ -1,5 +1,5 @@
-use crate::api_helpers;
-use crate::auth::TokenManager;
+use crate::soundcloud::api_helpers;
+use crate::soundcloud::TokenManager;
 use crate::auth_page::AuthPage;
 use crate::models::SoundCloudTrack;
 use crate::pages::{FeedPage, SearchPage, UserPage};

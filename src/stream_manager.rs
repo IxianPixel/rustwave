@@ -1,8 +1,8 @@
 use tokio_util::bytes::Bytes;
 use iced::widget::image::Handle;
-use crate::auth::TokenManager;
+use crate::soundcloud::TokenManager;
 use crate::models::SoundCloudTrack;
-use crate::api_helpers;
+use crate::soundcloud::api_helpers;
 
 /// Downloads stream data for a track
 pub async fn download_track_stream(

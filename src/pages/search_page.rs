@@ -1,10 +1,11 @@
-use crate::auth::TokenManager;
+use crate::soundcloud::TokenManager;
 use crate::models::{SearchResults, SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser};
 use crate::page_b::PageB;
 use crate::pages::{PlaylistPage, UserPage};
 use crate::track_list_manager::TrackListManager;
 use crate::widgets::{get_playlist_widget, get_user_widget};
-use crate::{Message, Page, api_helpers};
+use crate::{Message, Page};
+use crate::soundcloud::api_helpers;
 use iced::widget::image::Handle;
 use iced::widget::{Scrollable, column, row, text, text_input};
 use iced::{Length, Task};

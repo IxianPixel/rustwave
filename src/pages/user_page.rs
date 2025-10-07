@@ -3,14 +3,15 @@ use std::collections::HashMap;
 use iced::Task;
 use tracing::debug;
 
-use crate::auth::TokenManager;
+use crate::soundcloud::TokenManager;
 use crate::models::{SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser, SoundCloudUserProfile};
 use crate::page_b::PageB;
 use crate::pages::{FeedPage, PlaylistPage, SearchPage, SearchPageMessage};
 use crate::track_list_manager::TrackListManager;
 use crate::utilities::get_asset_path;
 use crate::widgets::get_playlist_widget;
-use crate::{Message, Page, api_helpers};
+use crate::{Message, Page};
+use crate::soundcloud::api_helpers;
 use iced::Color;
 use iced::Length;
 use iced::widget::image::{self, Handle};

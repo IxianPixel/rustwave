@@ -1,6 +1,6 @@
-use crate::auth::{AuthError, TokenManager};
+use crate::soundcloud::auth::{AuthError, TokenManager};
 use crate::models::{SearchResults, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
-use crate::soundcloud;
+use crate::soundcloud::api;
 use tokio_util::bytes::Bytes;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,7 +11,7 @@ pub async fn load_feed_with_refresh(
 ) -> Result<(Vec<SoundCloudTrack>, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
         Ok(token) => {
-            match soundcloud::get_activity_feed(token).await {
+            match api::get_activity_feed(token).await {
                 Ok(tracks) => Ok((tracks, token_manager)),
                 Err(e) => {
                     let error_msg = format!("{}", e);
@@ -32,7 +32,7 @@ pub async fn load_favourites_with_refresh(
 ) -> Result<(SoundCloudTracks, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
         Ok(token) => {
-            match soundcloud::get_liked_tracks(token).await {
+            match api::get_liked_tracks(token).await {
                 Ok(tracks) => Ok((tracks, token_manager)),
                 Err(_) => Err((AuthError::Other("Failed to load liked tracks".to_string()), token_manager)),
             }
@@ -47,7 +47,7 @@ pub async fn search_with_refresh(
 ) -> Result<(SearchResults, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
         Ok(token) => {
-            match soundcloud::search(token, &query).await {
+            match api::search(token, &query).await {
                 Ok(results) => Ok((results, token_manager)),
                 Err(e) => {
                     let error_msg = format!("{}", e);
@@ -71,7 +71,7 @@ pub async fn load_user_profile_with_refresh(
 ) -> Result<(SoundCloudUserProfile, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
         Ok(token) => {
-            match soundcloud::get_user_profile(token, user_urn).await {
+            match api::get_user_profile(token, user_urn).await {
                 Ok(results) => Ok((results, token_manager)),
                 Err(e) => {
                     let error_msg = format!("{}", e);
@@ -96,7 +96,7 @@ pub async fn like_track_with_refresh(
     let track_id = track.id;
     match token_manager.get_fresh_token().await {
         Ok(token) => {
-            match soundcloud::like_track(token, track).await {
+            match api::like_track(token, track).await {
                 Ok(_) => Ok((track_id, token_manager)),
                 Err(_) => Err((AuthError::Other("Failed to like track".to_string()), token_manager)),
             }
@@ -111,7 +111,7 @@ pub async fn get_track_data_with_refresh(
 ) -> Result<(Bytes, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
         Ok(token) => {
-            match soundcloud::get_track_data(token, stream_url).await {
+            match api::get_track_data(token, stream_url).await {
                 Ok(data) => Ok((data, token_manager)),
                 Err(_) => Err((AuthError::Other("Failed to get track data".to_string()), token_manager)),
             }
