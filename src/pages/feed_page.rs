@@ -1,17 +1,17 @@
 use iced::widget::image::Handle;
 
+use crate::Message;
+use crate::Page;
 use crate::api_helpers;
-use crate::models::SoundCloudTrack;
 use crate::auth::TokenManager;
+use crate::models::SoundCloudTrack;
 use crate::pages::SearchPage;
 use crate::pages::UserPage;
 use crate::track_list_manager::TrackListManager;
-use crate::Page;
-use crate::Message;
-use iced::Task;
-use iced::widget::{row, text, Scrollable};
 use iced::Color;
 use iced::Length;
+use iced::Task;
+use iced::widget::{Scrollable, row, text};
 
 #[derive(Debug, Clone)]
 pub enum FeedPageMessage {
@@ -42,7 +42,7 @@ impl FeedPage {
                 track_list: TrackListManager::new(),
                 track_load_failed: false,
             },
-            Task::done(Message::FeedPage(FeedPageMessage::LoadFeed))
+            Task::done(Message::FeedPage(FeedPageMessage::LoadFeed)),
         )
     }
 }
@@ -55,12 +55,17 @@ impl Page for FeedPage {
                     let token_manager = self.token_manager.clone();
                     return (
                         None,
-                        Task::perform(api_helpers::load_feed_with_refresh(token_manager), |result| {
-                            match result {
-                                Ok((tracks, token_manager)) => Message::FeedPage(Mf::FeedLoadedWithToken(tracks, token_manager)),
-                                Err((error, token_manager)) => Message::FeedPage(Mf::ApiErrorWithToken(error.to_string(), token_manager)),
-                            }
-                        })
+                        Task::perform(
+                            api_helpers::load_feed_with_refresh(token_manager),
+                            |result| match result {
+                                Ok((tracks, token_manager)) => Message::FeedPage(
+                                    Mf::FeedLoadedWithToken(tracks, token_manager),
+                                ),
+                                Err((error, token_manager)) => Message::FeedPage(
+                                    Mf::ApiErrorWithToken(error.to_string(), token_manager),
+                                ),
+                            },
+                        ),
                     );
                 }
                 FeedPageMessage::FeedLoadedWithToken(tracks, token_manager) => {
@@ -71,55 +76,67 @@ impl Page for FeedPage {
                     // Create tasks to load images for all tracks
                     let image_tasks = self.track_list.create_image_load_tasks(
                         |track_id, handle| Message::FeedPage(Mf::ImageLoaded(track_id, handle)),
-                        |track_id| Message::FeedPage(Mf::ImageLoadFailed(track_id))
+                        |track_id| Message::FeedPage(Mf::ImageLoadFailed(track_id)),
                     );
 
-                    return (None, Task::batch(image_tasks))
-                },
+                    return (None, Task::batch(image_tasks));
+                }
                 FeedPageMessage::PlayTrack(track) => {
                     self.track_list.set_current_track_id(track.id);
                     return (
                         None,
-                        Task::done(Message::StartQueue(track.clone(), self.track_list.tracks().clone(), self.token_manager.clone()))
+                        Task::done(Message::StartQueue(
+                            track.clone(),
+                            self.track_list.tracks().clone(),
+                            self.token_manager.clone(),
+                        )),
                     );
                 }
                 FeedPageMessage::ImageLoaded(track_id, handle) => {
                     self.track_list.handle_image_loaded(track_id, handle);
-                    return (None, Task::none())
+                    return (None, Task::none());
                 }
                 FeedPageMessage::ImageLoadFailed(track_id) => {
                     println!("Failed to load image for track {}", track_id);
-                    return (None, Task::none()) 
+                    return (None, Task::none());
                 }
                 FeedPageMessage::LikeTrack(track) => {
                     let token_manager = self.token_manager.clone();
                     return (
                         None,
-                        Task::perform(api_helpers::like_track_with_refresh(token_manager, track.clone()), move |result| {
-                            match result {
-                                Ok((track_id, token_manager)) => Message::FeedPage(Mf::TrackLikedWithToken(track_id, token_manager)),
-                                Err((error, token_manager)) => Message::FeedPage(Mf::ApiErrorWithToken(error.to_string(), token_manager)),
-                            }
-                        })
+                        Task::perform(
+                            api_helpers::like_track_with_refresh(token_manager, track.clone()),
+                            move |result| match result {
+                                Ok((track_id, token_manager)) => Message::FeedPage(
+                                    Mf::TrackLikedWithToken(track_id, token_manager),
+                                ),
+                                Err((error, token_manager)) => Message::FeedPage(
+                                    Mf::ApiErrorWithToken(error.to_string(), token_manager),
+                                ),
+                            },
+                        ),
                     );
                 }
                 FeedPageMessage::TrackLikedWithToken(_, token_manager) => todo!(),
                 FeedPageMessage::ApiErrorWithToken(_, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;
-                    return (None, Task::none())
-                },
+                    return (None, Task::none());
+                }
                 FeedPageMessage::LoadUser(user_urn) => {
                     let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
-                    return (Some(Box::new(user_page)), task)
-                },
+                    return (Some(Box::new(user_page)), task);
+                }
             }
         }
 
         if let Message::NavigateToSearch = message {
-            return (Some(Box::new(SearchPage::new(self.token_manager.clone()))), Task::none());
+            return (
+                Some(Box::new(SearchPage::new(self.token_manager.clone()))),
+                Task::none(),
+            );
         }
-        
+
         (None, Task::none())
     }
 
@@ -128,14 +145,20 @@ impl Page for FeedPage {
 
         let tracks_column = self.track_list.render_tracks(
             |t| Message::FeedPage(FeedPageMessage::PlayTrack(t)),
-            |urn| Message::FeedPage(FeedPageMessage::LoadUser(urn))
+            |urn| Message::FeedPage(FeedPageMessage::LoadUser(urn)),
+            |t| Message::FeedPage(FeedPageMessage::LikeTrack(t)),
         );
 
         column![
-            row![ if self.track_load_failed { text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)) } else { text("") } ],
-            Scrollable::new(tracks_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
+            row![if self.track_load_failed {
+                text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0))
+            } else {
+                text("")
+            }],
+            Scrollable::new(tracks_column)
+                .height(Length::FillPortion(1))
+                .width(Length::FillPortion(1)),
         ]
         .into()
     }
 }
-    

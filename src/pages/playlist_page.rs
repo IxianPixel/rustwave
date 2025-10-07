@@ -1,18 +1,18 @@
+use crate::Page;
 use crate::auth::TokenManager;
 use crate::models::SoundCloudPlaylist;
-use crate::page_b::PageB;
-use crate::pages::{FeedPage, SearchPage};
-use crate::pages::UserPage;
-use crate::track_list_manager::TrackListManager;
 use crate::models::SoundCloudTrack;
-use crate::Message;
-use crate::Page;
+use crate::page_b::PageB;
+use crate::pages::UserPage;
+use crate::pages::{FeedPage, SearchPage};
+use crate::track_list_manager::TrackListManager;
 use crate::widgets::get_playlist_widget;
-use iced::widget::image::Handle;
-use iced::Task;
-use iced::widget::{row, text, Scrollable};
+use crate::{Message, api_helpers};
 use iced::Color;
 use iced::Length;
+use iced::Task;
+use iced::widget::image::Handle;
+use iced::widget::{Scrollable, row, text};
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -46,7 +46,7 @@ impl PlaylistPage {
                 track_list: TrackListManager::new_with_tracks(playlist.tracks.clone()),
                 track_load_failed: false,
             },
-            Task::done(Message::PlaylistPage(PlaylistPageMessage::LoadPlaylist))
+            Task::done(Message::PlaylistPage(PlaylistPageMessage::LoadPlaylist)),
         )
     }
 }
@@ -58,43 +58,67 @@ impl Page for PlaylistPage {
                 PlaylistPageMessage::LoadPlaylist => {
                     let image_tasks = self.track_list.create_image_load_tasks(
                         |track_id, handle| Message::PlaylistPage(Mp::ImageLoaded(track_id, handle)),
-                        |track_id| Message::PlaylistPage(Mp::ImageLoadFailed(track_id))
+                        |track_id| Message::PlaylistPage(Mp::ImageLoadFailed(track_id)),
                     );
 
-                    return (None, Task::batch(image_tasks))
+                    return (None, Task::batch(image_tasks));
                 }
                 PlaylistPageMessage::PlayTrack(track) => {
                     self.track_list.set_current_track_id(track.id);
                     return (
                         None,
-                        Task::done(Message::StartQueue(track.clone(), self.track_list.tracks().clone(), self.token_manager.clone()))
+                        Task::done(Message::StartQueue(
+                            track.clone(),
+                            self.track_list.tracks().clone(),
+                            self.token_manager.clone(),
+                        )),
                     );
-                },
-                PlaylistPageMessage::LikeTrack(sound_cloud_track) => todo!(),
-                PlaylistPageMessage::TrackLikedWithToken(track_id, token_manager) => todo!(),
+                }
+                PlaylistPageMessage::LikeTrack(track) => {
+                    let token_manager = self.token_manager.clone();
+                    return (
+                        None,
+                        Task::perform(
+                            api_helpers::like_track_with_refresh(token_manager, track.clone()),
+                            move |result| match result {
+                                Ok((track_id, token_manager)) => Message::PlaylistPage(
+                                    Mp::TrackLikedWithToken(track_id, token_manager),
+                                ),
+                                Err((error, token_manager)) => Message::PlaylistPage(
+                                    Mp::ApiErrorWithToken(error.to_string(), token_manager),
+                                ),
+                            },
+                        ),
+                    );
+                }
+                PlaylistPageMessage::TrackLikedWithToken(track_id, token_manager) => {
+                    self.token_manager = token_manager;
+                    debug!("Track liked: {}", track_id);
+                    return (None, Task::none());
+                }
                 PlaylistPageMessage::ApiErrorWithToken(error_msg, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;
                     debug!("API Error: {}", error_msg);
-                    return (None, Task::none())
-                },
+                    return (None, Task::none());
+                }
                 PlaylistPageMessage::ImageLoaded(track_id, handle) => {
                     self.track_list.handle_image_loaded(track_id, handle);
-                    return (None, Task::none())
-                },
+                    return (None, Task::none());
+                }
                 PlaylistPageMessage::ImageLoadFailed(track_id) => {
                     println!("Failed to load image for track {}", track_id);
-                    return (None, Task::none())
-                },
+                    return (None, Task::none());
+                }
                 PlaylistPageMessage::LoadUser(user_urn) => {
                     debug!("Loading user {}", user_urn);
                     let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
                     return (Some(Box::new(user_page)), task);
-                },
+                }
                 PlaylistPageMessage::LoadNothing(playlist_urn) => {
                     debug!("This function does nothing but covers the case");
                     return (None, Task::none());
-                },
+                }
             }
         }
 
@@ -104,11 +128,17 @@ impl Page for PlaylistPage {
         }
 
         if let Message::NavigateToLikes = message {
-            return (Some(Box::new(PageB::new(self.token_manager.clone()))), Task::none());
+            return (
+                Some(Box::new(PageB::new(self.token_manager.clone()))),
+                Task::none(),
+            );
         }
 
         if let Message::NavigateToSearch = message {
-            return (Some(Box::new(SearchPage::new(self.token_manager.clone()))), Task::none());
+            return (
+                Some(Box::new(SearchPage::new(self.token_manager.clone()))),
+                Task::none(),
+            );
         }
 
         (None, Task::none())
@@ -119,12 +149,19 @@ impl Page for PlaylistPage {
 
         let tracks_column = self.track_list.render_tracks(
             |t| Message::PlaylistPage(PlaylistPageMessage::PlayTrack(t)),
-            |urn| Message::PlaylistPage(PlaylistPageMessage::LoadUser(urn))
+            |urn| Message::PlaylistPage(PlaylistPageMessage::LoadUser(urn)),
+            |t| Message::PlaylistPage(PlaylistPageMessage::LikeTrack(t)),
         );
 
         column![
-            row![ if self.track_load_failed { text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)) } else { text("") } ],
-            Scrollable::new(tracks_column).height(Length::FillPortion(1)).width(Length::FillPortion(1)),
+            row![if self.track_load_failed {
+                text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0))
+            } else {
+                text("")
+            }],
+            Scrollable::new(tracks_column)
+                .height(Length::FillPortion(1))
+                .width(Length::FillPortion(1)),
         ]
         .into()
     }
