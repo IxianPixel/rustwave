@@ -2,16 +2,17 @@ use iced::widget::image::Handle;
 
 use crate::Message;
 use crate::Page;
-use crate::soundcloud::api_helpers;
-use crate::soundcloud::TokenManager;
 use crate::models::SoundCloudTrack;
 use crate::pages::SearchPage;
 use crate::pages::UserPage;
+use crate::soundcloud::TokenManager;
+use crate::soundcloud::api_helpers;
 use crate::track_list_manager::TrackListManager;
 use iced::Color;
 use iced::Length;
 use iced::Task;
 use iced::widget::{Scrollable, row, text};
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub enum FeedPageMessage {
@@ -117,7 +118,11 @@ impl Page for FeedPage {
                         ),
                     );
                 }
-                FeedPageMessage::TrackLikedWithToken(_, token_manager) => todo!(),
+                FeedPageMessage::TrackLikedWithToken(track_id, token_manager) => {
+                    self.token_manager = token_manager;
+                    debug!("Track liked: {}", track_id);
+                    return (None, Task::none());
+                }
                 FeedPageMessage::ApiErrorWithToken(_, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;
