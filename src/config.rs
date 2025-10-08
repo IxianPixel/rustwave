@@ -1,7 +1,8 @@
-use std::{env, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 use directories::ProjectDirs;
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 
 lazy_static! {
     pub static ref PROJECT_NAME: String = env!("CARGO_CRATE_NAME").to_uppercase().to_string();
@@ -28,4 +29,71 @@ pub fn get_data_dir() -> PathBuf {
 
 fn project_directory() -> Option<ProjectDirs> {
     ProjectDirs::from("com", "malgra", env!("CARGO_PKG_NAME"))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SeekbarType {
+    Waveform,
+    Slider,
+}
+
+impl Default for SeekbarType {
+    fn default() -> Self {
+        Self::Waveform
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppSettings {
+    pub seekbar_type: SeekbarType,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            seekbar_type: SeekbarType::default(),
+        }
+    }
+}
+
+pub fn get_settings_path() -> PathBuf {
+    get_data_dir().join("app.toml")
+}
+
+pub fn load_settings() -> AppSettings {
+    let settings_path = get_settings_path();
+
+    if settings_path.exists() {
+        match fs::read_to_string(&settings_path) {
+            Ok(contents) => match toml::from_str(&contents) {
+                Ok(settings) => settings,
+                Err(e) => {
+                    eprintln!("Failed to parse settings file: {}. Using defaults.", e);
+                    AppSettings::default()
+                }
+            },
+            Err(e) => {
+                eprintln!("Failed to read settings file: {}. Using defaults.", e);
+                AppSettings::default()
+            }
+        }
+    } else {
+        let settings = AppSettings::default();
+        let _ = save_settings(&settings);
+        settings
+    }
+}
+
+pub fn save_settings(settings: &AppSettings) -> Result<(), Box<dyn std::error::Error>> {
+    let settings_path = get_settings_path();
+
+    // Ensure the data directory exists
+    if let Some(parent) = settings_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let toml_string = toml::to_string_pretty(settings)?;
+    fs::write(&settings_path, toml_string)?;
+
+    Ok(())
 }

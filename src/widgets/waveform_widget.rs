@@ -1,6 +1,6 @@
 use crate::Message;
-use iced::widget::{Image, MouseArea, canvas, container, image, image::Handle, mouse_area, stack};
 use iced::widget::canvas::{Cache, Frame, Geometry, Path, Program, Stroke};
+use iced::widget::{Image, MouseArea, canvas, container, image, image::Handle, mouse_area, stack};
 use iced::{Border, Color, Element, Length, Point, Rectangle, Renderer, Size, Theme};
 use std::time::Duration;
 
@@ -11,10 +11,7 @@ struct WaveformCanvas {
 
 impl WaveformCanvas {
     fn new(peaks: Vec<f32>, progress: f32) -> Self {
-        Self {
-            peaks,
-            progress,
-        }
+        Self { peaks, progress }
     }
 }
 
@@ -46,9 +43,9 @@ impl Program<Message> for WaveformCanvas {
                 let y_start = (height - bar_height) / 2.0;
 
                 let color = if x < progress_x {
-                    Color::from_rgb(1.0, 0.5, 0.0) // Orange
+                    Color::from_rgb(0.34, 0.59, 0.97) // Blue
                 } else {
-                    Color::from_rgb(1.0, 1.0, 1.0) // White
+                    Color::from_rgb(0.4, 0.42, 0.49) // Grey
                 };
 
                 let path = Path::rectangle(

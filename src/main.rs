@@ -111,6 +111,7 @@ struct MyApp {
     queue_manager: QueueManager,
     pending_stream_download: bool, // Flag to track if we're downloading the next track
     token_manager: Option<crate::soundcloud::TokenManager>, // Store token manager for queue operations
+    settings: config::AppSettings,
 }
 
 impl MyApp {
@@ -259,6 +260,7 @@ impl MyApp {
                 queue_manager: QueueManager::new(),
                 pending_stream_download: false,
                 token_manager: None,
+                settings: config::load_settings(),
             },
             Task::none(),
         )
@@ -671,22 +673,25 @@ impl MyApp {
                 ),
             ],)
             .align_y(Vertical::Center),
-            row![
-                slider(
-                    0.0..=100.0,
-                    self.progress_bar_value,
-                    Message::SeekToPosition
-                )
-                .width(Length::Fill)
-                .step(0.1),
-            ]
-            .padding(5),
-            row![widgets::get_waveform_widget(
-                self.waveform_peaks.clone(),
-                self.progress_bar_value / 100.0,
-            ),]
-            .padding(5),
-            horizontal_rule(20.0),
+            horizontal_rule(5.0),
+            if matches!(self.settings.seekbar_type, config::SeekbarType::Slider) {
+                row![
+                    slider(
+                        0.0..=100.0,
+                        self.progress_bar_value,
+                        Message::SeekToPosition
+                    )
+                    .width(Length::Fill)
+                    .step(0.1),
+                ]
+                .padding(5)
+            } else {
+                row![widgets::get_waveform_widget(
+                    self.waveform_peaks.clone(),
+                    self.progress_bar_value / 100.0,
+                ),]
+            },
+            horizontal_rule(5.0),
             container(self.page.view())
                 .padding(5)
                 .width(Length::Fill)

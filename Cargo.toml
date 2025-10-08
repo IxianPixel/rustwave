@@ -17,6 +17,7 @@ serde_json = "1.0.132"
 souvlaki = "0.8.3"
 tokio = {version = "1.47.1", features = ["full"]}
 tokio-util = "0.7.16"
+toml = "0.8"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5.7"
