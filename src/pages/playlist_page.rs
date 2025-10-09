@@ -6,7 +6,6 @@ use crate::page_b::PageB;
 use crate::pages::UserPage;
 use crate::pages::{FeedPage, SearchPage};
 use crate::track_list_manager::TrackListManager;
-use crate::widgets::get_playlist_widget;
 use crate::Message;
 use crate::soundcloud::api_helpers;
 use iced::Color;

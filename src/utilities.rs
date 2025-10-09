@@ -1,11 +1,7 @@
 use std::time::Duration;
-use std::path::PathBuf;
 
-use iced::widget::{image, image::Handle, container, column, row};
-use iced::widget::{button, mouse_area, svg, text, MouseArea, Row, Svg};
-use iced::Color;
-use crate::models::SoundCloudUser;
-use crate::{models::SoundCloudTrack, page_b, Message};
+use iced::widget::{image::Handle};
+use crate::{models::SoundCloudTrack};
 use ::image::load_from_memory;
 
 pub trait DurationFormat {

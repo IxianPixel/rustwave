@@ -2,7 +2,6 @@ use crate::soundcloud::auth::{AuthError, TokenManager};
 use crate::models::{SearchResults, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
 use crate::soundcloud::api;
 use tokio_util::bytes::Bytes;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Helper functions that combine token refresh with API calls for use with Iced Tasks
 

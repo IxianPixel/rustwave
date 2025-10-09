@@ -6,10 +6,9 @@ use crate::pages::{FeedPage, SearchPage, UserPage};
 use crate::track_list_manager::TrackListManager;
 use crate::{Message, Page};
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, button, column, row, text, text_input};
+use iced::widget::{Scrollable, button, column, row, text};
 use iced::{Color, Length, Task};
 use tokio_util::bytes::Bytes;
-use tracing::{debug, info};
 
 #[derive(Debug, Clone)]
 pub enum PageBMessage {

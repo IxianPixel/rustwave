@@ -2,7 +2,6 @@ use std::{io::Cursor, sync::mpsc, time::Duration};
 
 use crate::queue_manager::QueueManager;
 use crate::{
-    pages::SearchPage,
     utilities::{DurationFormat, get_asset_path},
 };
 use iced::widget::{image, image::Handle};
@@ -17,7 +16,6 @@ use iced::{
 };
 use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
 use souvlaki::{MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
-use tracing::debug;
 
 fn main() -> iced::Result {
     // Only initialize tracing in debug builds, filtered to only rustwave logs

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{SoundCloudPlaylist, SoundCloudTrack, SoundCloudTracks};
+use crate::models::{SoundCloudPlaylist, SoundCloudTrack};
 
 use super::deserialize_null_default;
 

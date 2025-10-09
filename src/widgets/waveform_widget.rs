@@ -1,8 +1,7 @@
 use crate::Message;
-use iced::widget::canvas::{Cache, Frame, Geometry, Path, Program, Stroke};
-use iced::widget::{Image, MouseArea, canvas, container, image, image::Handle, mouse_area, stack};
-use iced::{Border, Color, Element, Length, Point, Rectangle, Renderer, Size, Theme};
-use std::time::Duration;
+use iced::widget::canvas::{Frame, Geometry, Path, Program};
+use iced::widget::{canvas};
+use iced::{Color, Element, Length, Point, Rectangle, Renderer, Size, Theme};
 
 struct WaveformCanvas {
     peaks: Vec<f32>,

@@ -19,12 +19,10 @@ mod message;
 mod search;
 
 // Re-exports to maintain the same public API
-pub use activity::{SoundCloudActivity, SoundCloudActivityCollection};
-pub use item::{SoundCloudItem, SoundCloudPrimative};
+pub use activity::{SoundCloudActivityCollection};
 pub use playlist::{SoundCloudPlaylist, SoundCloudPlaylists};
 pub use track::{SoundCloudTrack, SoundCloudTracks};
 pub use user::{SoundCloudUser, SoundCloudUsers, SoundCloudUserProfile};
-pub use message::{TrackMessage};
 pub use search::{SearchResults};
 
 // Note: CurrentScreen enum was referenced in the original models.rs but not defined there.

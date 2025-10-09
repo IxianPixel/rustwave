@@ -7,7 +7,7 @@ use crate::widgets::{get_playlist_widget, get_user_widget};
 use crate::{Message, Page};
 use crate::soundcloud::api_helpers;
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, column, row, text, text_input};
+use iced::widget::{Scrollable, column, row, text_input};
 use iced::{Length, Task};
 use std::collections::HashMap;
 use tracing::debug;
