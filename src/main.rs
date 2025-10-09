@@ -1,9 +1,7 @@
 use std::{io::Cursor, sync::mpsc, time::Duration};
 
 use crate::queue_manager::QueueManager;
-use crate::{
-    utilities::{DurationFormat, get_asset_path},
-};
+use crate::utilities::{DurationFormat, get_asset_path};
 use iced::widget::{image, image::Handle};
 use iced::{
     Color, Event, Length, Subscription, Task,
@@ -62,8 +60,6 @@ enum Message {
     SeekForwards,
     SeekBackwards,
     UiTick,
-    ProgressBarClicked,
-    ProgressBarReleased,
     SeekToPosition(f32),
     MediaControlEvent(souvlaki::MediaControlEvent),
     NextTrack,
@@ -343,19 +339,6 @@ impl MyApp {
                 self.token_manager = Some(token_manager);
                 Task::none()
             }
-            Message::PageB(page_b::PageBMessage::StreamDownloadedWithToken(
-                track_data,
-                image_handle,
-                token_manager,
-            )) => {
-                // Legacy handler - redirect to new queue system
-                Task::done(Message::QueueStreamDownloaded(
-                    track_data,
-                    image_handle,
-                    None,
-                    token_manager,
-                ))
-            }
             Message::PlayPausePlayback => {
                 if !self.sink.empty() {
                     if self.sink.is_paused() {
@@ -586,7 +569,7 @@ impl MyApp {
         ])
     }
 
-    fn view(&self) -> iced::Element<Message> {
+    fn view(&self) -> iced::Element<'_, Message> {
         let image = if self.artwork.is_some() {
             image(self.artwork.clone().unwrap()).width(100).height(100)
         } else {
@@ -639,7 +622,6 @@ impl MyApp {
                                     .height(22)
                                     .style(|_theme, _status| svg::Style {
                                         color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                        ..Default::default()
                                     }),
                             )
                             .on_press(Message::NavigateToFeed),
@@ -649,7 +631,6 @@ impl MyApp {
                                     .height(22)
                                     .style(|_theme, _status| svg::Style {
                                         color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                        ..Default::default()
                                     }),
                             )
                             .on_press(Message::NavigateToLikes),
@@ -659,7 +640,6 @@ impl MyApp {
                                     .height(22)
                                     .style(|_theme, _status| svg::Style {
                                         color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                        ..Default::default()
                                     }),
                             )
                             .on_press(Message::NavigateToSearch),

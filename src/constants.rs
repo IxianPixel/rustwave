@@ -9,13 +9,13 @@ fn load_dotenv() {
     }
     
     // If that fails, try to load from the executable's directory (for app bundles)
-    if let Ok(exe_path) = env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let env_path = exe_dir.join(".env");
-            if env_path.exists() {
-                dotenv::from_path(env_path).ok();
-                return;
-            }
+    if let Ok(exe_path) = env::current_exe()
+        && let Some(exe_dir) = exe_path.parent()
+    {
+        let env_path = exe_dir.join(".env");
+        if env_path.exists() {
+            dotenv::from_path(env_path).ok();
+            return;
         }
     }
     

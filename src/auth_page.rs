@@ -1,14 +1,11 @@
-use crate::{page_b::PageB, Message, Page};
-use iced::widget::{button, column, text};
-use iced::Task;
-use tracing::info;
 use crate::soundcloud::auth;
+use crate::{Message, Page, page_b::PageB};
+use iced::Task;
+use iced::widget::{button, column, text};
 
 #[derive(Debug, Clone)]
 pub enum AuthPageMessage {
     LoginPressed,
-    LoginSuccess,
-    LoginError(String),
 }
 
 type Ma = AuthPageMessage;
@@ -34,7 +31,7 @@ impl Page for AuthPage {
                 AuthPageMessage::LoginPressed => {
                     // Store the authentication state and handle it in the view
                     self.jwt = "authenticating".to_string();
-                    
+
                     // Run the authentication synchronously to avoid borrowing `self` across threads
                     let rt = tokio::runtime::Runtime::new().unwrap();
                     match rt.block_on(auth::authenticate()) {
@@ -50,20 +47,7 @@ impl Page for AuthPage {
                             eprintln!("Authentication failed: {}", e);
                         }
                     }
-                    
-                    (None, Task::none())
-                }
-                AuthPageMessage::LoginSuccess => {
-                    info!("Login successful!");
-                    // Here you might want to navigate to another page
-                    // For example: Some(Box::new(HomePage::new()))
-                    self.jwt = "authenticated".to_string();
-                    (None, Task::none())
-                }
-                AuthPageMessage::LoginError(e) => {
-                    info!("Login failed: {}", e);
-                    // Here you might want to show an error message to the user
-                    self.jwt = format!("error: {}", e);
+
                     (None, Task::none())
                 }
             }
@@ -72,7 +56,7 @@ impl Page for AuthPage {
         }
     }
 
-    fn view(&self) -> iced::Element<Message> {
+    fn view(&self) -> iced::Element<'_, Message> {
         let status = match self.jwt.as_str() {
             "" => "Not logged in".to_string(),
             "authenticating" => "Authenticating...".to_string(),
@@ -84,8 +68,7 @@ impl Page for AuthPage {
         column![
             text(status).size(20),
             text(self.token.clone()).size(20),
-            button("Log in")
-                .on_press(Message::AuthPage(Ma::LoginPressed))
+            button("Log in").on_press(Message::AuthPage(Ma::LoginPressed))
         ]
         .padding(20)
         .spacing(10)

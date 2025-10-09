@@ -17,14 +17,13 @@ lazy_static! {
 }
 
 pub fn get_data_dir() -> PathBuf {
-    let directory = if let Some(s) = DATA_FOLDER.clone() {
+    if let Some(s) = DATA_FOLDER.clone() {
         s
     } else if let Some(proj_dirs) = project_directory() {
         proj_dirs.data_local_dir().to_path_buf()
     } else {
         PathBuf::from(".").join(".data")
-    };
-    directory
+    }
 }
 
 fn project_directory() -> Option<ProjectDirs> {
@@ -43,17 +42,9 @@ impl Default for SeekbarType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppSettings {
     pub seekbar_type: SeekbarType,
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        Self {
-            seekbar_type: SeekbarType::default(),
-        }
-    }
 }
 
 pub fn get_settings_path() -> PathBuf {

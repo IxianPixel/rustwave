@@ -56,7 +56,6 @@ where
                     .height(20)
                     .style(|_theme, _status| svg::Style {
                         color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                        ..Default::default()
                     }),
                 text(track.favoritings_count.unwrap_or(0).format_compact_number())
                     .color(Color::from_rgb(1.0, 1.0, 1.0)),
@@ -68,7 +67,6 @@ where
                     .height(20)
                     .style(|_theme, _status| svg::Style {
                         color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                        ..Default::default()
                     }),
                 text(track.reposts_count.unwrap_or(0).format_compact_number())
                     .color(Color::from_rgb(1.0, 1.0, 1.0)),
@@ -80,7 +78,6 @@ where
                     .height(20)
                     .style(|_theme, _status| svg::Style {
                         color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                        ..Default::default()
                     }),
                 text(track.playback_count.unwrap_or(0).format_compact_number())
                     .color(Color::from_rgb(1.0, 1.0, 1.0)),

@@ -9,7 +9,7 @@ pub struct SoundCloudUsers {
     pub collection: Vec<SoundCloudUser>,
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
 pub struct SoundCloudUser {
     pub urn: String,
     #[serde(deserialize_with = "deserialize_null_default")]
@@ -21,22 +21,9 @@ pub struct SoundCloudUser {
     pub followers_count: Option<u64>,
 }
 
-impl Default for SoundCloudUser {
-    fn default() -> Self {
-        Self {
-            urn: String::new(),
-            username: String::new(),
-            full_name: String::new(),
-            avatar_url: String::new(),
-            followers_count: None,
-        }
-    }
-}
-
 #[derive(Deserialize, Debug, Clone)]
 pub struct SoundCloudUserProfile {
     pub user: SoundCloudUser,
     pub tracks: Vec<SoundCloudTrack>,
     pub playlists: Vec<SoundCloudPlaylist>,
 }
-

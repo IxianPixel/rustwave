@@ -198,7 +198,7 @@ impl Page for SearchPage {
         (None, Task::none())
     }
 
-    fn view(&self) -> iced::Element<Message> {
+    fn view(&self) -> iced::Element<'_, Message> {
         let mut indices: Vec<usize> = (0..self.users.len()).collect();
         indices.sort_by(|&a, &b| {
             let count_a = self.users[a].followers_count.unwrap_or(0);

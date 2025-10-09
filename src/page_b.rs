@@ -1,14 +1,13 @@
-use crate::soundcloud::api_helpers;
-use crate::soundcloud::TokenManager;
 use crate::auth_page::AuthPage;
 use crate::models::SoundCloudTrack;
 use crate::pages::{FeedPage, SearchPage, UserPage};
+use crate::soundcloud::TokenManager;
+use crate::soundcloud::api_helpers;
 use crate::track_list_manager::TrackListManager;
 use crate::{Message, Page};
 use iced::widget::image::Handle;
 use iced::widget::{Scrollable, button, column, row, text};
 use iced::{Color, Length, Task};
-use tokio_util::bytes::Bytes;
 
 #[derive(Debug, Clone)]
 pub enum PageBMessage {
@@ -23,7 +22,6 @@ pub enum PageBMessage {
     FeedLoadedWithToken(Vec<SoundCloudTrack>, TokenManager),
     FavouritesLoadedWithToken(crate::models::SoundCloudTracks, TokenManager),
     TrackLikedWithToken(u64, TokenManager),
-    StreamDownloadedWithToken(Bytes, Option<Handle>, TokenManager),
     ApiErrorWithToken(String, TokenManager),
     LoadUser(String),
 }
@@ -155,16 +153,6 @@ impl Page for PageB {
                     println!("Track liked: {}", track_id);
                     return (None, Task::none());
                 }
-                PageBMessage::StreamDownloadedWithToken(
-                    _track_data,
-                    _image_handle,
-                    token_manager,
-                ) => {
-                    self.token_manager = token_manager;
-                    println!("Stream downloaded");
-                    // _track_data and _image_handle can be used as needed
-                    return (None, Task::none());
-                }
                 PageBMessage::ApiErrorWithToken(error_msg, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;
@@ -193,7 +181,7 @@ impl Page for PageB {
         (None, Task::none())
     }
 
-    fn view(&self) -> iced::Element<Message> {
+    fn view(&self) -> iced::Element<'_, Message> {
         let tracks_column = self.track_list.render_tracks(
             |t| Message::PageB(Mb::PlayTrack(t)),
             |urn| Message::PageB(Mb::LoadUser(urn)),

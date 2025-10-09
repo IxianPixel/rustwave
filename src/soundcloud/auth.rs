@@ -1,5 +1,5 @@
 use oauth2::basic::{BasicClient, BasicTokenType};
-use oauth2::{reqwest, AccessToken, RefreshToken, StandardTokenResponse};
+use oauth2::{AccessToken, RefreshToken, StandardTokenResponse, reqwest};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, ConfigurationError, CsrfToken,
     PkceCodeChallenge, RedirectUrl, TokenResponse, TokenUrl,
@@ -16,8 +16,8 @@ use url::Url;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
-use crate::constants;
 use crate::config;
+use crate::constants;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredToken {
@@ -37,15 +37,15 @@ fn default_created_at() -> u64 {
 }
 
 impl StoredToken {
-    fn from_token_response(token: StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>) -> Self {
+    fn from_token_response(
+        token: StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>,
+    ) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        let expires_at = token.expires_in().map(|duration| {
-            now + duration.as_secs()
-        });
+        let expires_at = token.expires_in().map(|duration| now + duration.as_secs());
 
         Self {
             access_token: token.access_token().secret().to_string(),
@@ -73,7 +73,9 @@ impl StoredToken {
     }
 
     fn to_refresh_token(&self) -> Option<RefreshToken> {
-        self.refresh_token.as_ref().map(|rt| RefreshToken::new(rt.clone()))
+        self.refresh_token
+            .as_ref()
+            .map(|rt| RefreshToken::new(rt.clone()))
     }
 
     fn get_refresh_token_age_days(&self) -> u64 {
@@ -102,7 +104,10 @@ impl TokenStorage {
         Ok(Self { file_path })
     }
 
-    fn save_token(&self, token: StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>) -> Result<(), AuthError> {
+    fn save_token(
+        &self,
+        token: StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>,
+    ) -> Result<(), AuthError> {
         let stored_token = StoredToken::from_token_response(token);
         let json = serde_json::to_string_pretty(&stored_token)?;
         fs::write(&self.file_path, json)?;
@@ -122,7 +127,10 @@ impl TokenStorage {
                 Ok(Some(stored_token))
             }
             Err(e) => {
-                warn!("Failed to parse stored token: {}, clearing invalid token", e);
+                warn!(
+                    "Failed to parse stored token: {}, clearing invalid token",
+                    e
+                );
                 self.clear_token()?;
                 Ok(None)
             }
@@ -209,7 +217,10 @@ impl TokenManager {
                     }
                 }
                 Err(e) => {
-                    return Err(AuthError::OAuth(format!("Failed to refresh token during runtime: {}", e)));
+                    return Err(AuthError::OAuth(format!(
+                        "Failed to refresh token during runtime: {}",
+                        e
+                    )));
                 }
             }
         }
@@ -223,39 +234,43 @@ impl TokenManager {
             if let Ok(new_token) = refresh_access_token(refresh_token.clone()).await {
                 info!("Successfully refreshed OAuth token after auth error");
                 self.storage.save_token(new_token.clone())?;
-                
+
                 // Update the current token
                 let mut current_token = self.current_token.lock().unwrap();
                 *current_token = new_token.access_token().clone();
-                
+
                 // Update the refresh token if a new one was provided
                 if let Some(new_refresh_token) = new_token.refresh_token() {
                     self.refresh_token = Some(new_refresh_token.clone());
                 }
-                
+
                 return Ok(());
             } else {
-                return Err(AuthError::OAuth("Failed to refresh token after auth error".to_string()));
+                return Err(AuthError::OAuth(
+                    "Failed to refresh token after auth error".to_string(),
+                ));
             }
         }
-        
+
         // If refresh failed, we need to re-authenticate
         warn!("Token refresh failed, need to re-authenticate");
-        Err(AuthError::OAuth("Token refresh failed, need to re-authenticate".to_string()))
+        Err(AuthError::OAuth(
+            "Token refresh failed, need to re-authenticate".to_string(),
+        ))
     }
 }
 
 pub async fn authenticate() -> Result<TokenManager, AuthError> {
     let storage = TokenStorage::new()?;
-    
+
     // Try to load existing token
     if let Some(stored_token) = storage.load_token()? {
         if !stored_token.is_expired() {
             info!("Using cached OAuth token");
             let refresh_token = stored_token.to_refresh_token();
-            return Ok(TokenManager::new(stored_token.to_access_token(), refresh_token)?);
+            return TokenManager::new(stored_token.to_access_token(), refresh_token);
         }
-        
+
         info!("Cached OAuth token expired, attempting refresh");
         // Token is expired, try to refresh it
         if let Some(refresh_token) = stored_token.to_refresh_token() {
@@ -263,7 +278,7 @@ pub async fn authenticate() -> Result<TokenManager, AuthError> {
                 info!("Successfully refreshed OAuth token");
                 storage.save_token(new_token.clone())?;
                 let new_refresh_token = new_token.refresh_token().cloned();
-                return Ok(TokenManager::new(new_token.access_token().clone(), new_refresh_token)?);
+                return TokenManager::new(new_token.access_token().clone(), new_refresh_token);
             } else {
                 warn!("Failed to refresh OAuth token, will perform full authentication");
             }
@@ -359,10 +374,12 @@ pub async fn authenticate() -> Result<TokenManager, AuthError> {
     storage.save_token(token.clone())?;
 
     let refresh_token = token.refresh_token().cloned();
-    Ok(TokenManager::new(token.access_token().clone(), refresh_token)?)
+    TokenManager::new(token.access_token().clone(), refresh_token)
 }
 
-async fn refresh_access_token(refresh_token: RefreshToken) -> Result<StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>, AuthError> {
+async fn refresh_access_token(
+    refresh_token: RefreshToken,
+) -> Result<StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>, AuthError> {
     let client = BasicClient::new(ClientId::new(constants::CLIENT_ID.to_string()))
         .set_client_secret(ClientSecret::new(constants::CLIENT_SECRET.to_string()))
         .set_token_uri(TokenUrl::new(constants::SOUNDCLOUD_TOKEN_URL.to_string())?);
@@ -386,9 +403,13 @@ async fn refresh_access_token(refresh_token: RefreshToken) -> Result<StandardTok
             if error_string.contains("invalid_grant") {
                 Err(AuthError::OAuth("invalid_grant".to_string()))
             } else if error_string.contains("invalid_client") {
-                Err(AuthError::OAuth("Invalid client credentials. Check CLIENT_ID and CLIENT_SECRET.".to_string()))
+                Err(AuthError::OAuth(
+                    "Invalid client credentials. Check CLIENT_ID and CLIENT_SECRET.".to_string(),
+                ))
             } else if error_string.contains("unauthorized_client") {
-                Err(AuthError::OAuth("Client not authorized to refresh tokens.".to_string()))
+                Err(AuthError::OAuth(
+                    "Client not authorized to refresh tokens.".to_string(),
+                ))
             } else {
                 Err(AuthError::OAuth(format!("OAuth refresh failed: {}", e)))
             }

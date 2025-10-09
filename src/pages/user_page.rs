@@ -225,7 +225,7 @@ impl Page for UserPage {
         (None, Task::none())
     }
 
-    fn view(&self) -> iced::Element<Message> {
+    fn view(&self) -> iced::Element<'_, Message> {
         let tracks_column = self.track_list.render_tracks(
             |t| Message::UserPage(UserPageMessage::PlayTrack(t)),
             |urn| Message::UserPage(UserPageMessage::NavigateToUser(urn)),

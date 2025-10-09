@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use crate::models::SoundCloudTrack;
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 pub struct QueueManager {
@@ -20,10 +20,10 @@ impl QueueManager {
     /// Initialize queue from a specific track in the track list
     pub fn start_queue_from_track(&mut self, track_id: u64, tracks: Vec<SoundCloudTrack>) {
         self.original_tracks = tracks.clone();
-        
+
         // Use the get_track_queue function from utilities
         let queue_tracks = crate::utilities::get_track_queue(track_id, tracks);
-        
+
         self.queue = queue_tracks.into_iter().collect();
         self.current_index = if self.queue.is_empty() { None } else { Some(0) };
     }
@@ -39,22 +39,22 @@ impl QueueManager {
 
     /// Move to the next track in the queue
     pub fn next_track(&mut self) -> Option<&SoundCloudTrack> {
-        if let Some(current) = self.current_index {
-            if current + 1 < self.queue.len() {
-                self.current_index = Some(current + 1);
-                return self.current_track();
-            }
+        if let Some(current) = self.current_index
+            && current + 1 < self.queue.len()
+        {
+            self.current_index = Some(current + 1);
+            return self.current_track();
         }
         None
     }
 
     /// Move to the previous track in the queue
     pub fn previous_track(&mut self) -> Option<&SoundCloudTrack> {
-        if let Some(current) = self.current_index {
-            if current > 0 {
-                self.current_index = Some(current - 1);
-                return self.current_track();
-            }
+        if let Some(current) = self.current_index
+            && current > 0
+        {
+            self.current_index = Some(current - 1);
+            return self.current_track();
         }
         None
     }
