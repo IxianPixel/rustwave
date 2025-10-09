@@ -151,9 +151,9 @@ impl Page for UserPage {
                     self.playlist_images.insert(urn, handle);
                     return (None, Task::none());
                 }
-                UserPageMessage::UserImageLoaded(_, handle) => todo!(),
+                UserPageMessage::UserImageLoaded(_, _handle) => todo!(),
                 UserPageMessage::UserImageLoadFailed(_) => todo!(),
-                UserPageMessage::ApiErrorWithToken(_, token_manager) => {
+                UserPageMessage::ApiErrorWithToken(_error_msg, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;
                     return (None, Task::none());

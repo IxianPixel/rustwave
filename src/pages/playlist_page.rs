@@ -32,7 +32,6 @@ type Mp = PlaylistPageMessage;
 
 pub struct PlaylistPage {
     token_manager: TokenManager,
-    playlist: SoundCloudPlaylist,
     track_list: TrackListManager,
     track_load_failed: bool,
 }
@@ -42,7 +41,6 @@ impl PlaylistPage {
         (
             Self {
                 token_manager,
-                playlist: playlist.clone(),
                 track_list: TrackListManager::new_with_tracks(playlist.tracks.clone()),
                 track_load_failed: false,
             },
@@ -115,7 +113,7 @@ impl Page for PlaylistPage {
                     let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
                     return (Some(Box::new(user_page)), task);
                 }
-                PlaylistPageMessage::LoadNothing(playlist_urn) => {
+                PlaylistPageMessage::LoadNothing(_playlist_urn) => {
                     debug!("This function does nothing but covers the case");
                     return (None, Task::none());
                 }

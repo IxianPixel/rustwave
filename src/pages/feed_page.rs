@@ -123,7 +123,7 @@ impl Page for FeedPage {
                     debug!("Track liked: {}", track_id);
                     return (None, Task::none());
                 }
-                FeedPageMessage::ApiErrorWithToken(_, token_manager) => {
+                FeedPageMessage::ApiErrorWithToken(_error_msg, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;
                     return (None, Task::none());

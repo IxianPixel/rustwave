@@ -1,12 +1,2 @@
-use crate::models::SoundCloudTrack;
-
-enum NavigationMessage {
-    PageB,
-    SearchPage,
-}
-
-pub enum TrackMessage {
-    PlayTrack(SoundCloudTrack),
-    LikeTrack(SoundCloudTrack),
-    UnknownMessage,
-}
+// This file previously contained NavigationMessage and TrackMessage enums
+// which were unused and have been removed.

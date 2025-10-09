@@ -33,7 +33,6 @@ pub struct PageB {
     token_manager: TokenManager,
     track_list: TrackListManager,
     track_load_failed: bool,
-    search_query: String,
 }
 
 impl PageB {
@@ -42,7 +41,6 @@ impl PageB {
             token_manager,
             track_list: TrackListManager::new(),
             track_load_failed: false,
-            search_query: String::new(),
         }
     }
 }
