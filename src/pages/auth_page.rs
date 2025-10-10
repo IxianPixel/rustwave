@@ -1,5 +1,6 @@
+use crate::pages::likes_page::LikesPage;
 use crate::soundcloud::auth;
-use crate::{Message, Page, page_b::PageB};
+use crate::{Message, Page};
 use iced::Task;
 use iced::widget::{button, column, text};
 
@@ -40,7 +41,7 @@ impl Page for AuthPage {
                             self.token = access_token.secret().to_string();
                             self.jwt = "authenticated".to_string();
                             println!("Authentication successful!");
-                            return (Some(Box::new(PageB::new(tm))), Task::none());
+                            return (Some(Box::new(LikesPage::new(tm))), Task::none());
                         }
                         Err(e) => {
                             self.jwt = format!("error: {}", e);

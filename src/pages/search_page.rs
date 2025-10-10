@@ -1,11 +1,10 @@
-use crate::soundcloud::TokenManager;
 use crate::managers::TrackListManager;
 use crate::models::{SearchResults, SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser};
-use crate::page_b::PageB;
-use crate::pages::{PlaylistPage, UserPage};
+use crate::pages::{LikesPage, PlaylistPage, UserPage};
+use crate::soundcloud::TokenManager;
+use crate::soundcloud::api_helpers;
 use crate::widgets::{get_playlist_widget, get_user_widget};
 use crate::{Message, Page};
-use crate::soundcloud::api_helpers;
 use iced::widget::image::Handle;
 use iced::widget::{Scrollable, column, row, text_input};
 use iced::{Length, Task};
@@ -162,18 +161,23 @@ impl Page for SearchPage {
                     let token_manager = self.token_manager.clone();
                     return (
                         None,
-                        Task::perform(api_helpers::like_track_with_refresh(token_manager, track.clone()), move |result| {
-                            match result {
-                                Ok((track_id, token_manager)) => Message::SearchPage(Ms::TrackLikedWithToken(track_id, token_manager)),
-                                Err((error, token_manager)) => Message::SearchPage(Ms::ApiErrorWithToken(error.to_string(), token_manager)),
-                            }
-                        })
+                        Task::perform(
+                            api_helpers::like_track_with_refresh(token_manager, track.clone()),
+                            move |result| match result {
+                                Ok((track_id, token_manager)) => Message::SearchPage(
+                                    Ms::TrackLikedWithToken(track_id, token_manager),
+                                ),
+                                Err((error, token_manager)) => Message::SearchPage(
+                                    Ms::ApiErrorWithToken(error.to_string(), token_manager),
+                                ),
+                            },
+                        ),
                     );
-                },
+                }
                 SearchPageMessage::TrackLikedWithToken(track_id, token_manager) => {
                     self.token_manager = token_manager;
                     debug!("Track liked: {}", track_id);
-                    return (None, Task::none())
+                    return (None, Task::none());
                 }
                 SearchPageMessage::LoadUser(user_urn) => {
                     debug!("Loading user {}", user_urn);
@@ -190,7 +194,7 @@ impl Page for SearchPage {
 
         if let Message::NavigateToLikes = message {
             return (
-                Some(Box::new(PageB::new(self.token_manager.clone()))),
+                Some(Box::new(LikesPage::new(self.token_manager.clone()))),
                 Task::none(),
             );
         }
@@ -217,7 +221,7 @@ impl Page for SearchPage {
         let tracks_column = self.track_list.render_tracks(
             |t| Message::SearchPage(SearchPageMessage::PlayTrack(t)),
             |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn)),
-            |t | Message::SearchPage(SearchPageMessage::LikeTrack(t)),
+            |t| Message::SearchPage(SearchPageMessage::LikeTrack(t)),
         );
 
         let playlists_column = self.playlists.iter().fold(column![], |col, playlist| {

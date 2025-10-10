@@ -5,8 +5,7 @@ use tracing::debug;
 
 use crate::managers::TrackListManager;
 use crate::models::{SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser, SoundCloudUserProfile};
-use crate::page_b::PageB;
-use crate::pages::{FeedPage, PlaylistPage, SearchPage, SearchPageMessage};
+use crate::pages::{FeedPage, LikesPage, PlaylistPage, SearchPage, SearchPageMessage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use crate::utilities::get_asset_path;
@@ -210,7 +209,7 @@ impl Page for UserPage {
 
         if let Message::NavigateToLikes = message {
             return (
-                Some(Box::new(PageB::new(self.token_manager.clone()))),
+                Some(Box::new(LikesPage::new(self.token_manager.clone()))),
                 Task::none(),
             );
         }

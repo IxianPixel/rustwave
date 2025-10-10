@@ -1,6 +1,6 @@
-use crate::auth_page::AuthPage;
 use crate::managers::TrackListManager;
 use crate::models::SoundCloudTrack;
+use crate::pages::auth_page::AuthPage;
 use crate::pages::{FeedPage, SearchPage, UserPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
@@ -10,7 +10,7 @@ use iced::widget::{Scrollable, button, column, row, text};
 use iced::{Color, Length, Task};
 
 #[derive(Debug, Clone)]
-pub enum PageBMessage {
+pub enum LikesPageMessage {
     ButtonPressed,
     LoadFeed,
     LoadFavourites,
@@ -25,15 +25,15 @@ pub enum PageBMessage {
     ApiErrorWithToken(String, TokenManager),
     LoadUser(String),
 }
-type Mb = PageBMessage;
+type Ml = LikesPageMessage;
 
-pub struct PageB {
+pub struct LikesPage {
     token_manager: TokenManager,
     track_list: TrackListManager,
     track_load_failed: bool,
 }
 
-impl PageB {
+impl LikesPage {
     pub fn new(token_manager: TokenManager) -> Self {
         Self {
             token_manager,
@@ -43,48 +43,48 @@ impl PageB {
     }
 }
 
-impl Page for PageB {
+impl Page for LikesPage {
     fn update(&mut self, message: Message) -> (Option<Box<dyn Page>>, Task<Message>) {
-        if let Message::PageB(msg) = message {
+        if let Message::LikesPage(msg) = message {
             match msg {
-                PageBMessage::ButtonPressed => {
+                LikesPageMessage::ButtonPressed => {
                     return (Some(Box::new(AuthPage::new())), Task::none());
                 }
-                PageBMessage::LoadFeed => {
+                LikesPageMessage::LoadFeed => {
                     let token_manager = self.token_manager.clone();
                     return (
                         None,
                         Task::perform(
                             api_helpers::load_feed_with_refresh(token_manager),
                             |result| match result {
-                                Ok((tracks, token_manager)) => {
-                                    Message::PageB(Mb::FeedLoadedWithToken(tracks, token_manager))
-                                }
-                                Err((error, token_manager)) => Message::PageB(
-                                    Mb::ApiErrorWithToken(error.to_string(), token_manager),
+                                Ok((tracks, token_manager)) => Message::LikesPage(
+                                    Ml::FeedLoadedWithToken(tracks, token_manager),
+                                ),
+                                Err((error, token_manager)) => Message::LikesPage(
+                                    Ml::ApiErrorWithToken(error.to_string(), token_manager),
                                 ),
                             },
                         ),
                     );
                 }
-                PageBMessage::LoadFavourites => {
+                LikesPageMessage::LoadFavourites => {
                     let token_manager = self.token_manager.clone();
                     return (
                         None,
                         Task::perform(
                             api_helpers::load_favourites_with_refresh(token_manager),
                             |result| match result {
-                                Ok((tracks, token_manager)) => Message::PageB(
-                                    Mb::FavouritesLoadedWithToken(tracks, token_manager),
+                                Ok((tracks, token_manager)) => Message::LikesPage(
+                                    Ml::FavouritesLoadedWithToken(tracks, token_manager),
                                 ),
-                                Err((error, token_manager)) => Message::PageB(
-                                    Mb::ApiErrorWithToken(error.to_string(), token_manager),
+                                Err((error, token_manager)) => Message::LikesPage(
+                                    Ml::ApiErrorWithToken(error.to_string(), token_manager),
                                 ),
                             },
                         ),
                     );
                 }
-                PageBMessage::PlayTrack(track) => {
+                LikesPageMessage::PlayTrack(track) => {
                     self.track_list.set_current_track_id(track.id);
 
                     // Send the StartQueue message to main app with the selected track and all tracks
@@ -97,69 +97,69 @@ impl Page for PageB {
                         )),
                     );
                 }
-                PageBMessage::ImageLoaded(track_id, handle) => {
+                LikesPageMessage::ImageLoaded(track_id, handle) => {
                     self.track_list.handle_image_loaded(track_id, handle);
                     return (None, Task::none());
                 }
-                PageBMessage::ImageLoadFailed(track_id) => {
+                LikesPageMessage::ImageLoadFailed(track_id) => {
                     println!("Failed to load image for track {}", track_id);
                     return (None, Task::none());
                 }
-                PageBMessage::LikeTrack(track) => {
+                LikesPageMessage::LikeTrack(track) => {
                     let token_manager = self.token_manager.clone();
                     return (
                         None,
                         Task::perform(
                             api_helpers::like_track_with_refresh(token_manager, track.clone()),
                             move |result| match result {
-                                Ok((track_id, token_manager)) => {
-                                    Message::PageB(Mb::TrackLikedWithToken(track_id, token_manager))
-                                }
-                                Err((error, token_manager)) => Message::PageB(
-                                    Mb::ApiErrorWithToken(error.to_string(), token_manager),
+                                Ok((track_id, token_manager)) => Message::LikesPage(
+                                    Ml::TrackLikedWithToken(track_id, token_manager),
+                                ),
+                                Err((error, token_manager)) => Message::LikesPage(
+                                    Ml::ApiErrorWithToken(error.to_string(), token_manager),
                                 ),
                             },
                         ),
                     );
                 }
-                PageBMessage::FeedLoadedWithToken(tracks, token_manager) => {
+                LikesPageMessage::FeedLoadedWithToken(tracks, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = false;
                     self.track_list.set_tracks(tracks);
 
                     // Create tasks to load images for all tracks
                     let image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| Message::PageB(Mb::ImageLoaded(track_id, handle)),
-                        |track_id| Message::PageB(Mb::ImageLoadFailed(track_id)),
+                        |track_id, handle| Message::LikesPage(Ml::ImageLoaded(track_id, handle)),
+                        |track_id| Message::LikesPage(Ml::ImageLoadFailed(track_id)),
                     );
 
                     return (None, Task::batch(image_tasks));
                 }
-                PageBMessage::FavouritesLoadedWithToken(soundcloud_tracks, token_manager) => {
+                LikesPageMessage::FavouritesLoadedWithToken(soundcloud_tracks, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = false;
                     self.track_list.set_tracks(soundcloud_tracks.collection);
 
                     // Create tasks to load images for all tracks
                     let image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| Message::PageB(Mb::ImageLoaded(track_id, handle)),
-                        |track_id| Message::PageB(Mb::ImageLoadFailed(track_id)),
+                        |track_id, handle| Message::LikesPage(Ml::ImageLoaded(track_id, handle)),
+                        |track_id| Message::LikesPage(Ml::ImageLoadFailed(track_id)),
                     );
 
                     return (None, Task::batch(image_tasks));
                 }
-                PageBMessage::TrackLikedWithToken(track_id, token_manager) => {
+                LikesPageMessage::TrackLikedWithToken(track_id, token_manager) => {
                     self.token_manager = token_manager;
                     println!("Track liked: {}", track_id);
                     return (None, Task::none());
                 }
-                PageBMessage::ApiErrorWithToken(error_msg, token_manager) => {
+                LikesPageMessage::ApiErrorWithToken(error_msg, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;
                     println!("API Error: {}", error_msg);
                     return (None, Task::none());
                 }
-                PageBMessage::LoadUser(user_urn) => {
+                LikesPageMessage::LoadUser(user_urn) => {
                     let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
                     return (Some(Box::new(user_page)), task);
                 }
@@ -183,16 +183,16 @@ impl Page for PageB {
 
     fn view(&self) -> iced::Element<'_, Message> {
         let tracks_column = self.track_list.render_tracks(
-            |t| Message::PageB(Mb::PlayTrack(t)),
-            |urn| Message::PageB(Mb::LoadUser(urn)),
-            |t| Message::PageB(Mb::LikeTrack(t)),
+            |t| Message::LikesPage(Ml::PlayTrack(t)),
+            |urn| Message::LikesPage(Ml::LoadUser(urn)),
+            |t| Message::LikesPage(Ml::LikeTrack(t)),
         );
 
         column![
             row![
-                button("Feed").on_press(Message::PageB(Mb::LoadFeed)),
-                button("Favourites").on_press(Message::PageB(Mb::LoadFavourites)),
-                button("Log out").on_press(Message::PageB(Mb::ButtonPressed)),
+                button("Feed").on_press(Message::LikesPage(Ml::LoadFeed)),
+                button("Favourites").on_press(Message::LikesPage(Ml::LoadFavourites)),
+                button("Log out").on_press(Message::LikesPage(Ml::ButtonPressed)),
             ]
             .spacing(10),
             row![if self.track_load_failed {

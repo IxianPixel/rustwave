@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use crate::managers::{AudioManager, QueueManager};
-use iced::widget::{image::Handle};
+use crate::pages::{AuthPage, LikesPage};
+use iced::widget::image::Handle;
 use iced::{
     Event, Length, Subscription, Task,
     event::{self, Status},
@@ -31,12 +32,10 @@ fn main() -> iced::Result {
         .run_with(MyApp::new)
 }
 
-mod auth_page;
 mod config;
 mod constants;
 mod managers;
 mod models;
-mod page_b;
 mod pages;
 mod soundcloud;
 mod utilities;
@@ -44,8 +43,8 @@ mod widgets;
 
 #[derive(Debug, Clone)]
 enum Message {
-    PageB(page_b::PageBMessage),
-    AuthPage(auth_page::AuthPageMessage),
+    LikesPage(pages::LikesPageMessage),
+    AuthPage(pages::AuthPageMessage),
     SearchPage(pages::SearchPageMessage),
     FeedPage(pages::FeedPageMessage),
     UserPage(pages::UserPageMessage),
@@ -114,9 +113,7 @@ impl MyApp {
 
         let track_clone = track.clone();
         Task::perform(
-            async move {
-                crate::managers::download_track_stream(token_manager, &track_clone).await
-            },
+            async move { crate::managers::download_track_stream(token_manager, &track_clone).await },
             |result| match result {
                 Ok((track_data, image_handle, waveform_peaks, token_manager)) => {
                     Message::QueueStreamDownloaded(
@@ -134,7 +131,7 @@ impl MyApp {
     fn new() -> (Self, Task<Message>) {
         (
             Self {
-                page: Box::new(auth_page::AuthPage::new()),
+                page: Box::new(AuthPage::new()),
                 title: "Nothing".to_string(),
                 user: "Nothing".to_string(),
                 artwork: None,
@@ -171,10 +168,6 @@ impl MyApp {
                     Task::none()
                 }
             }
-            Message::PageB(page_b::PageBMessage::PlayTrack(_track)) => {
-                // This will be handled by the page to convert to StartQueue message
-                Task::none()
-            }
             Message::QueueStreamDownloaded(
                 track_data,
                 image_handle,
@@ -197,7 +190,11 @@ impl MyApp {
                 self.artwork = image_handle;
 
                 // Update media controls metadata
-                self.audio_manager.update_metadata(&self.title, &self.user, self.audio_manager.track_duration);
+                self.audio_manager.update_metadata(
+                    &self.title,
+                    &self.user,
+                    self.audio_manager.track_duration,
+                );
                 Task::none()
             }
             Message::QueueStreamFailed(error, token_manager) => {

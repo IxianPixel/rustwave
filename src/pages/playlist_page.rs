@@ -1,12 +1,12 @@
+use crate::Message;
 use crate::Page;
-use crate::soundcloud::TokenManager;
 use crate::managers::TrackListManager;
 use crate::models::SoundCloudPlaylist;
 use crate::models::SoundCloudTrack;
-use crate::page_b::PageB;
+use crate::pages::LikesPage;
 use crate::pages::UserPage;
 use crate::pages::{FeedPage, SearchPage};
-use crate::Message;
+use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use iced::Color;
 use iced::Length;
@@ -127,7 +127,7 @@ impl Page for PlaylistPage {
 
         if let Message::NavigateToLikes = message {
             return (
-                Some(Box::new(PageB::new(self.token_manager.clone()))),
+                Some(Box::new(LikesPage::new(self.token_manager.clone()))),
                 Task::none(),
             );
         }
