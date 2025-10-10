@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use iced::Task;
 use tracing::debug;
 
-use crate::soundcloud::TokenManager;
 use crate::managers::TrackListManager;
 use crate::models::{SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser, SoundCloudUserProfile};
 use crate::page_b::PageB;
 use crate::pages::{FeedPage, PlaylistPage, SearchPage, SearchPageMessage};
+use crate::soundcloud::TokenManager;
+use crate::soundcloud::api_helpers;
 use crate::utilities::get_asset_path;
 use crate::widgets::get_playlist_widget;
 use crate::{Message, Page};
-use crate::soundcloud::api_helpers;
 use iced::Color;
 use iced::Length;
 use iced::widget::image::{self, Handle};
@@ -229,7 +229,7 @@ impl Page for UserPage {
         let tracks_column = self.track_list.render_tracks(
             |t| Message::UserPage(UserPageMessage::PlayTrack(t)),
             |urn| Message::UserPage(UserPageMessage::NavigateToUser(urn)),
-            |t| Message::SearchPage(SearchPageMessage::LikeTrack(t)),
+            |t| Message::UserPage(UserPageMessage::LikeTrack(t)),
         );
 
         let playlists_column = self.playlists.iter().fold(column![], |col, playlist| {
