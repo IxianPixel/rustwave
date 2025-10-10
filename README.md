@@ -12,6 +12,13 @@
 </a>
 </p>
 
+## Table of Contents
+
+- [About](#about)
+- [Installation](#installation)
+- [Screenshots](#screenshots)
+- [Acknowledgement](#acknowledgement)
+
 ## About
 
 Rustwave is a SoundCloud client written entirely in Rust. It is still under heavy development with features being added
@@ -86,3 +93,23 @@ At the moment you need to clone to repo and build it yourself.
     cd rustwave
     cargo build --release
     ```
+
+## Screenshots
+
+### Search
+
+<p align="center">
+    <img align="center" width="600px" src="./assets/screenshots/search.png"/>
+</p>
+
+### Feed
+
+<p align="center">
+    <img align="center" width="600px" src="./assets/screenshots/feed.png"/>
+</p>
+
+## Acknowledgement
+
+Rustwave is written in [Rust](https://www.rust-lang.org) and is built on top of awesome libraries such
+as [Iced](https://github.com/iced-rs/iced), [rodio](https://github.com/RustAudio/rodio), [souvlaki](https://github.com/Sinono3/souvlaki),
+and [many more](Cargo.toml).
