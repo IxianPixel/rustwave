@@ -1,8 +1,8 @@
 use crate::soundcloud::TokenManager;
+use crate::managers::TrackListManager;
 use crate::models::{SearchResults, SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser};
 use crate::page_b::PageB;
 use crate::pages::{PlaylistPage, UserPage};
-use crate::track_list_manager::TrackListManager;
 use crate::widgets::{get_playlist_widget, get_user_widget};
 use crate::{Message, Page};
 use crate::soundcloud::api_helpers;

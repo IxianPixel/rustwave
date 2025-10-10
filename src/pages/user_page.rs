@@ -4,10 +4,10 @@ use iced::Task;
 use tracing::debug;
 
 use crate::soundcloud::TokenManager;
+use crate::managers::TrackListManager;
 use crate::models::{SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser, SoundCloudUserProfile};
 use crate::page_b::PageB;
 use crate::pages::{FeedPage, PlaylistPage, SearchPage, SearchPageMessage};
-use crate::track_list_manager::TrackListManager;
 use crate::utilities::get_asset_path;
 use crate::widgets::get_playlist_widget;
 use crate::{Message, Page};

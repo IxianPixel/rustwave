@@ -2,12 +2,12 @@ use iced::widget::image::Handle;
 
 use crate::Message;
 use crate::Page;
+use crate::managers::TrackListManager;
 use crate::models::SoundCloudTrack;
 use crate::pages::SearchPage;
 use crate::pages::UserPage;
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
-use crate::track_list_manager::TrackListManager;
 use iced::Color;
 use iced::Length;
 use iced::Task;

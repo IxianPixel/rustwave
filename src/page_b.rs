@@ -1,9 +1,9 @@
 use crate::auth_page::AuthPage;
+use crate::managers::TrackListManager;
 use crate::models::SoundCloudTrack;
 use crate::pages::{FeedPage, SearchPage, UserPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
-use crate::track_list_manager::TrackListManager;
 use crate::{Message, Page};
 use iced::widget::image::Handle;
 use iced::widget::{Scrollable, button, column, row, text};
