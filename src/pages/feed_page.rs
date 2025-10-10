@@ -4,8 +4,8 @@ use crate::Message;
 use crate::Page;
 use crate::managers::TrackListManager;
 use crate::models::SoundCloudTrack;
-use crate::pages::SearchPage;
 use crate::pages::UserPage;
+use crate::pages::{LikesPage, SearchPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use iced::Color;
@@ -133,6 +133,11 @@ impl Page for FeedPage {
                     return (Some(Box::new(user_page)), task);
                 }
             }
+        }
+
+        if let Message::NavigateToLikes = message {
+            let (page, task) = LikesPage::new(self.token_manager.clone());
+            return (Some(Box::new(page)), task);
         }
 
         if let Message::NavigateToSearch = message {

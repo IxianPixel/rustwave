@@ -41,7 +41,8 @@ impl Page for AuthPage {
                             self.token = access_token.secret().to_string();
                             self.jwt = "authenticated".to_string();
                             println!("Authentication successful!");
-                            return (Some(Box::new(LikesPage::new(tm))), Task::none());
+                            let (page, task) = LikesPage::new(tm);
+                            return (Some(Box::new(page)), task);
                         }
                         Err(e) => {
                             self.jwt = format!("error: {}", e);

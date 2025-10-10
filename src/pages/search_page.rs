@@ -193,10 +193,8 @@ impl Page for SearchPage {
         }
 
         if let Message::NavigateToLikes = message {
-            return (
-                Some(Box::new(LikesPage::new(self.token_manager.clone()))),
-                Task::none(),
-            );
+            let (page, task) = LikesPage::new(self.token_manager.clone());
+            return (Some(Box::new(page)), task);
         }
 
         (None, Task::none())

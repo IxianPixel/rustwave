@@ -1,7 +1,7 @@
 use crate::managers::TrackListManager;
 use crate::models::SoundCloudTrack;
 use crate::pages::auth_page::AuthPage;
-use crate::pages::{FeedPage, SearchPage, UserPage};
+use crate::pages::{FeedPage, FeedPageMessage, SearchPage, UserPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use crate::{Message, Page};
@@ -11,15 +11,11 @@ use iced::{Color, Length, Task};
 
 #[derive(Debug, Clone)]
 pub enum LikesPageMessage {
-    ButtonPressed,
-    LoadFeed,
     LoadFavourites,
     PlayTrack(SoundCloudTrack),
-    ImageLoaded(u64, Handle), // track_id, image_handle
-    ImageLoadFailed(u64),     // track_id
+    ImageLoaded(u64, Handle),
+    ImageLoadFailed(u64),
     LikeTrack(SoundCloudTrack),
-    // New messages for handling token manager updates
-    FeedLoadedWithToken(Vec<SoundCloudTrack>, TokenManager),
     FavouritesLoadedWithToken(crate::models::SoundCloudTracks, TokenManager),
     TrackLikedWithToken(u64, TokenManager),
     ApiErrorWithToken(String, TokenManager),
@@ -34,12 +30,15 @@ pub struct LikesPage {
 }
 
 impl LikesPage {
-    pub fn new(token_manager: TokenManager) -> Self {
-        Self {
-            token_manager,
-            track_list: TrackListManager::new(),
-            track_load_failed: false,
-        }
+    pub fn new(token_manager: TokenManager) -> (Self, Task<Message>) {
+        (
+            Self {
+                token_manager,
+                track_list: TrackListManager::new(),
+                track_load_failed: false,
+            },
+            Task::done(Message::LikesPage(LikesPageMessage::LoadFavourites)),
+        )
     }
 }
 
@@ -47,26 +46,6 @@ impl Page for LikesPage {
     fn update(&mut self, message: Message) -> (Option<Box<dyn Page>>, Task<Message>) {
         if let Message::LikesPage(msg) = message {
             match msg {
-                LikesPageMessage::ButtonPressed => {
-                    return (Some(Box::new(AuthPage::new())), Task::none());
-                }
-                LikesPageMessage::LoadFeed => {
-                    let token_manager = self.token_manager.clone();
-                    return (
-                        None,
-                        Task::perform(
-                            api_helpers::load_feed_with_refresh(token_manager),
-                            |result| match result {
-                                Ok((tracks, token_manager)) => Message::LikesPage(
-                                    Ml::FeedLoadedWithToken(tracks, token_manager),
-                                ),
-                                Err((error, token_manager)) => Message::LikesPage(
-                                    Ml::ApiErrorWithToken(error.to_string(), token_manager),
-                                ),
-                            },
-                        ),
-                    );
-                }
                 LikesPageMessage::LoadFavourites => {
                     let token_manager = self.token_manager.clone();
                     return (
@@ -122,19 +101,6 @@ impl Page for LikesPage {
                         ),
                     );
                 }
-                LikesPageMessage::FeedLoadedWithToken(tracks, token_manager) => {
-                    self.token_manager = token_manager;
-                    self.track_load_failed = false;
-                    self.track_list.set_tracks(tracks);
-
-                    // Create tasks to load images for all tracks
-                    let image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| Message::LikesPage(Ml::ImageLoaded(track_id, handle)),
-                        |track_id| Message::LikesPage(Ml::ImageLoadFailed(track_id)),
-                    );
-
-                    return (None, Task::batch(image_tasks));
-                }
                 LikesPageMessage::FavouritesLoadedWithToken(soundcloud_tracks, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = false;
@@ -189,12 +155,6 @@ impl Page for LikesPage {
         );
 
         column![
-            row![
-                button("Feed").on_press(Message::LikesPage(Ml::LoadFeed)),
-                button("Favourites").on_press(Message::LikesPage(Ml::LoadFavourites)),
-                button("Log out").on_press(Message::LikesPage(Ml::ButtonPressed)),
-            ]
-            .spacing(10),
             row![if self.track_load_failed {
                 text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0))
             } else {
