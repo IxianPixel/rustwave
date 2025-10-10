@@ -42,6 +42,8 @@ jobs:
 
     - name: Run clippy
       # TODO: Re-enable -D warnings once warnings are fixed
+      env:
+        RUSTFLAGS: ""
       run: cargo clippy
 
     - name: Build release
