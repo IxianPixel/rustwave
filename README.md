@@ -1,14 +1,16 @@
 <p align="center">
-    <img align="center" width="250" src="./assets/icon.png"/>
+    <img align="center" style="padding: 10px;" width="250px" src="./assets/icon.png"/>
 <br>
+<a href="https://github.com/IxianPixel/rustwave/releases/latest">
+    <img src="https://img.shields.io/github/v/release/IxianPixel/rustwave" alt="Version">
+</a>
 <a href="https://github.com/IxianPixel/rustwave/actions/workflows/ci.yml">
-    <img src="https://github.com/IxianPixel/rustwave/actions/workflows/ci.yml/badge.svg" alt="Build Status">
+    <img src="https://github.com/IxianPixel/rustwave/actions/workflows/ci.yml/badge.svg" alt="CI">
 </a>
 <a href="https://github.com/IxianPixel/rustwave/actions/workflows/macos-bundle.yml">
-    <img src="https://github.com/IxianPixel/rustwave/actions/workflows/macos-bundle.yml/badge.svg" alt="Build Status">
+    <img src="https://github.com/IxianPixel/rustwave/actions/workflows/macos-bundle.yml/badge.svg" alt="macOS Build Status">
 </a>
 </p>
-<hr>
 
 ## About
 
