@@ -38,7 +38,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libasound2-dev pkg-config libssl-dev
+        sudo apt-get install -y libasound2-dev pkg-config libssl-dev libdbus-1-dev
 
     - name: Run clippy
       run: cargo clippy -- -D warnings
