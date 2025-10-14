@@ -1,15 +1,16 @@
-use crate::models::{SearchResults, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
+use crate::models::{SearchResults, SoundCloudActivityCollection, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
 use crate::soundcloud::api;
 use crate::soundcloud::auth::{AuthError, TokenManager};
 use tokio_util::bytes::Bytes;
 
 /// Helper functions that combine token refresh with API calls for use with Iced Tasks
-pub async fn load_feed_with_refresh(
+pub async fn load_feed_paginated_with_refresh(
     mut token_manager: TokenManager,
-) -> Result<(Vec<SoundCloudTrack>, TokenManager), (AuthError, TokenManager)> {
+    next_href: Option<String>,
+) -> Result<(SoundCloudActivityCollection, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
-        Ok(token) => match api::get_activity_feed(token).await {
-            Ok(tracks) => Ok((tracks, token_manager)),
+        Ok(token) => match api::get_activity_feed_paginated(token, next_href).await {
+            Ok(collection) => Ok((collection, token_manager)),
             Err(e) => {
                 let error_msg = format!("{}", e);
                 if error_msg.contains("401")
@@ -34,11 +35,12 @@ pub async fn load_feed_with_refresh(
     }
 }
 
-pub async fn load_favourites_with_refresh(
+pub async fn load_favourites_paginated_with_refresh(
     mut token_manager: TokenManager,
+    next_href: Option<String>,
 ) -> Result<(SoundCloudTracks, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
-        Ok(token) => match api::get_liked_tracks(token).await {
+        Ok(token) => match api::get_liked_tracks_paginated(token, next_href).await {
             Ok(tracks) => Ok((tracks, token_manager)),
             Err(_) => Err((
                 AuthError::Other("Failed to load liked tracks".to_string()),

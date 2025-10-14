@@ -38,6 +38,10 @@ impl TrackListManager {
         self.tracks = tracks;
     }
 
+    pub fn append_tracks(&mut self, mut tracks: Vec<SoundCloudTrack>) {
+        self.tracks.append(&mut tracks);
+    }
+
     pub fn current_track_id(&self) -> u64 {
         self.current_track_id
     }

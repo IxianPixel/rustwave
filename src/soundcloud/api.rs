@@ -33,6 +33,37 @@ pub async fn get_liked_tracks(
     Ok(body)
 }
 
+pub async fn get_liked_tracks_paginated(
+    access_token: AccessToken,
+    next_href: Option<String>,
+) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
+    let c = reqwest::Client::new();
+
+    let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/me/likes/tracks".to_string());
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
+            ("access", "playable,blocked"),
+            ("limit", "50"),
+            ("linked_partitioning", "true"),
+        ]);
+    }
+
+    let response = request.send().await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudTracks>().await?;
+    Ok(body)
+}
+
 pub async fn get_activity_feed(
     access_token: AccessToken,
 ) -> Result<Vec<SoundCloudTrack>, Box<dyn std::error::Error + Send + Sync>> {
@@ -53,6 +84,37 @@ pub async fn get_activity_feed(
     let body = response.json::<SoundCloudActivityCollection>().await?;
     let tracks = body.collection.into_iter().map(|activity| activity.origin).collect();
     Ok(tracks)
+}
+
+pub async fn get_activity_feed_paginated(
+    access_token: AccessToken,
+    next_href: Option<String>,
+) -> Result<SoundCloudActivityCollection, Box<dyn std::error::Error + Send + Sync>> {
+    let c = reqwest::Client::new();
+
+    let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/me/activities/tracks".to_string());
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
+            ("access", "playable,blocked"),
+            ("limit", "50"),
+            ("linked_partitioning", "true"),
+        ]);
+    }
+
+    let response = request.send().await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudActivityCollection>().await?;
+    Ok(body)
 }
 
 pub async fn search_tracks(

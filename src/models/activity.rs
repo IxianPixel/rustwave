@@ -12,4 +12,5 @@ pub struct SoundCloudActivity {
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct SoundCloudActivityCollection {
     pub collection: Vec<SoundCloudActivity>,
+    pub next_href: Option<String>,
 }

@@ -5,6 +5,7 @@ use super::{SoundCloudUser, deserialize_null_default};
 #[derive(Deserialize, Debug, Clone)]
 pub struct SoundCloudTracks {
     pub collection: Vec<SoundCloudTrack>,
+    pub next_href: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
