@@ -7,8 +7,8 @@
 <a href="https://github.com/IxianPixel/rustwave/actions/workflows/ci.yml">
     <img src="https://github.com/IxianPixel/rustwave/actions/workflows/ci.yml/badge.svg" alt="CI">
 </a>
-<a href="https://github.com/IxianPixel/rustwave/actions/workflows/macos-bundle.yml">
-    <img src="https://github.com/IxianPixel/rustwave/actions/workflows/macos-bundle.yml/badge.svg" alt="macOS Build Status">
+<a href="https://github.com/IxianPixel/rustwave/actions/workflows/release.yml">
+    <img src="https://github.com/IxianPixel/rustwave/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </a>
 </p>
 
