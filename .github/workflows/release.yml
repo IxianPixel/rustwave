@@ -1,12 +1,34 @@
 name: Multi-Platform Release
 
+# Required GitHub Secrets for macOS Code Signing & Notarization:
+#
+# MACOS_CERTIFICATE_P12: Base64-encoded .p12 Developer ID Application certificate
+#   - Export from Keychain Access: File > Export Items > .p12 format
+#   - Encode: base64 -i certificate.p12 | pbcopy
+#
+# MACOS_CERTIFICATE_PASSWORD: Password for the .p12 certificate file
+#
+# APPLE_API_KEY_ID: App Store Connect API Key ID
+#   - Found in App Store Connect > Users and Access > Keys > Key ID
+#
+# APPLE_API_ISSUER_ID: App Store Connect API Issuer ID
+#   - Found in App Store Connect > Users and Access > Keys > Issuer ID
+#
+# APPLE_API_KEY: Base64-encoded App Store Connect API Key (.p8 file)
+#   - Download from App Store Connect > Users and Access > Keys
+#   - Encode: base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy
+#
+# APPLE_TEAM_ID: Your Apple Developer Team ID (10 character alphanumeric)
+#   - Found in App Store Connect or developer.apple.com/account
+#
+# SOUNDCLOUD_CLIENT_ID: SoundCloud OAuth client ID
+# SOUNDCLOUD_CLIENT_SECRET: SoundCloud OAuth client secret
+# SOUNDCLOUD_REDIRECT_URL: SoundCloud OAuth redirect URL
+
 on:
   push:
-    branches: [ main ]
     tags:
-      - 'v*'
-  pull_request:
-    branches: [ main ]
+      - "v*"
   workflow_dispatch:
 
 env:
@@ -18,490 +40,602 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
 
-    - name: Cache Cargo dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-    - name: Create .env file
-      run: |
-        @"
-        CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
-        CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
-        REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
-        "@ | Out-File -FilePath .env -Encoding utf8
-      shell: pwsh
+      - name: Create .env file
+        run: |
+          @"
+          CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
+          CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
+          REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
+          "@ | Out-File -FilePath .env -Encoding utf8
+        shell: pwsh
 
-    - name: Build release binary
-      run: cargo build --release
+      - name: Build release binary
+        run: cargo build --release
 
-    - name: Extract version from Cargo.toml
-      id: version
-      run: |
-        $version = Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1 | ForEach-Object { $_.Matches.Groups[1].Value }
-        echo "VERSION=$version" >> $env:GITHUB_ENV
-        echo "Version: $version"
-      shell: pwsh
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          $version = Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1 | ForEach-Object { $_.Matches.Groups[1].Value }
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+          echo "Version: $version"
+        shell: pwsh
 
-    - name: Create distribution folder
-      run: |
-        New-Item -ItemType Directory -Force -Path rustwave-windows
-        New-Item -ItemType Directory -Force -Path rustwave-windows/assets
-      shell: pwsh
+      - name: Create distribution folder
+        run: |
+          New-Item -ItemType Directory -Force -Path rustwave-windows
+          New-Item -ItemType Directory -Force -Path rustwave-windows/assets
+        shell: pwsh
 
-    - name: Copy files
-      run: |
-        Copy-Item target/release/rustwave.exe rustwave-windows/
-        Copy-Item .env rustwave-windows/
-        Copy-Item -Recurse -Force assets/* rustwave-windows/assets/
-      shell: pwsh
+      - name: Copy files
+        run: |
+          Copy-Item target/release/rustwave.exe rustwave-windows/
+          Copy-Item .env rustwave-windows/
+          Copy-Item -Recurse -Force assets/* rustwave-windows/assets/
+        shell: pwsh
 
-    - name: Create archive
-      run: |
-        $archiveName = "rustwave-windows-v${{ env.VERSION }}.zip"
-        Compress-Archive -Path rustwave-windows -DestinationPath $archiveName
-        echo "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_ENV
-      shell: pwsh
+      - name: Create archive
+        run: |
+          $archiveName = "rustwave-windows-v${{ env.VERSION }}.zip"
+          Compress-Archive -Path rustwave-windows -DestinationPath $archiveName
+          echo "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_ENV
+        shell: pwsh
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: rustwave-windows
-        path: ${{ env.ARCHIVE_NAME }}
-        retention-days: 30
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustwave-windows
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 30
 
-    - name: Upload to release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ${{ env.ARCHIVE_NAME }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-intel:
-    runs-on: macos-13  # Intel runner
+    runs-on: macos-13 # Intel runner
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
 
-    - name: Cache Cargo dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-intel-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-intel-cargo-
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-intel-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-intel-cargo-
 
-    - name: Create .env file
-      run: |
-        cat > .env << EOF
-        CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
-        CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
-        REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
-        EOF
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
+          CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
+          REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
+          EOF
 
-    - name: Build release binary
-      run: cargo build --release
+      - name: Build release binary
+        run: cargo build --release
 
-    - name: Extract version from Cargo.toml
-      id: version
-      run: |
-        VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
-        echo "Version: $VERSION"
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION"
 
-    - name: Create app bundle
-      run: |
-        rm -rf Rustwave.app
-        mkdir -p Rustwave.app/Contents/MacOS
-        mkdir -p Rustwave.app/Contents/Resources
+      - name: Create app bundle
+        run: |
+          rm -rf Rustwave.app
+          mkdir -p Rustwave.app/Contents/MacOS
+          mkdir -p Rustwave.app/Contents/Resources
 
-        cp target/release/rustwave Rustwave.app/Contents/MacOS/
-        cp .env Rustwave.app/Contents/MacOS/
-        cp -r assets Rustwave.app/Contents/MacOS/
+          cp target/release/rustwave Rustwave.app/Contents/MacOS/
+          cp .env Rustwave.app/Contents/MacOS/
+          cp -r assets Rustwave.app/Contents/MacOS/
 
-        cat > Rustwave.app/Contents/Info.plist << 'EOF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>CFBundleExecutable</key>
-            <string>rustwave</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.rustwave.app</string>
-            <key>CFBundleName</key>
-            <string>Rustwave</string>
-            <key>CFBundleDisplayName</key>
-            <string>Rustwave</string>
-            <key>CFBundleVersion</key>
-            <string>${VERSION}</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${VERSION}</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleSignature</key>
-            <string>????</string>
-            <key>CFBundleIconFile</key>
-            <string>AppIcon</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>10.12</string>
-            <key>NSHighResolutionCapable</key>
-            <true/>
-            <key>NSSupportsAutomaticGraphicsSwitching</key>
-            <true/>
-        </dict>
-        </plist>
-        EOF
+          cat > Rustwave.app/Contents/Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>rustwave</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.rustwave.app</string>
+              <key>CFBundleName</key>
+              <string>Rustwave</string>
+              <key>CFBundleDisplayName</key>
+              <string>Rustwave</string>
+              <key>CFBundleVersion</key>
+              <string>${VERSION}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${VERSION}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleSignature</key>
+              <string>????</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.12</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>NSSupportsAutomaticGraphicsSwitching</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
 
-        mkdir -p AppIcon.iconset
-        sips -z 16 16 assets/icon.png --out AppIcon.iconset/icon_16x16.png
-        sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_16x16@2x.png
-        sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_32x32.png
-        sips -z 64 64 assets/icon.png --out AppIcon.iconset/icon_32x32@2x.png
-        sips -z 128 128 assets/icon.png --out AppIcon.iconset/icon_128x128.png
-        sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_128x128@2x.png
-        sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_256x256.png
-        sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_256x256@2x.png
-        sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_512x512.png
-        cp assets/icon.png AppIcon.iconset/icon_512x512@2x.png
+          mkdir -p AppIcon.iconset
+          sips -z 16 16 assets/icon.png --out AppIcon.iconset/icon_16x16.png
+          sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_16x16@2x.png
+          sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_32x32.png
+          sips -z 64 64 assets/icon.png --out AppIcon.iconset/icon_32x32@2x.png
+          sips -z 128 128 assets/icon.png --out AppIcon.iconset/icon_128x128.png
+          sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_128x128@2x.png
+          sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_256x256.png
+          sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_256x256@2x.png
+          sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_512x512.png
+          cp assets/icon.png AppIcon.iconset/icon_512x512@2x.png
 
-        iconutil -c icns AppIcon.iconset
-        cp AppIcon.icns Rustwave.app/Contents/Resources/
+          iconutil -c icns AppIcon.iconset
+          cp AppIcon.icns Rustwave.app/Contents/Resources/
 
-        chmod +x Rustwave.app/Contents/MacOS/rustwave
+          chmod +x Rustwave.app/Contents/MacOS/rustwave
 
-    - name: Create archive
-      run: |
-        ARCHIVE_NAME="rustwave-macos-intel-v${VERSION}.tar.gz"
-        tar -czf "$ARCHIVE_NAME" Rustwave.app
-        echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+      - name: Install rcodesign
+        run: |
+          curl -L https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.27.0/apple-codesign-0.27.0-x86_64-apple-darwin.tar.gz -o rcodesign.tar.gz
+          tar -xzf rcodesign.tar.gz
+          chmod +x apple-codesign-*/rcodesign
+          sudo mv apple-codesign-*/rcodesign /usr/local/bin/
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: rustwave-macos-intel
-        path: ${{ env.ARCHIVE_NAME }}
-        retention-days: 30
+      - name: Setup signing certificate
+        run: |
+          echo "${{ secrets.MACOS_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
 
-    - name: Upload to release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ${{ env.ARCHIVE_NAME }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Code sign the app bundle
+        run: |
+          rcodesign sign \
+            --p12-file certificate.p12 \
+            --p12-password "${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" \
+            --code-signature-flags runtime \
+            Rustwave.app
+
+          # Verify the signature
+          codesign -v Rustwave.app
+          codesign -dvv Rustwave.app
+
+      - name: Create App Store Connect API key
+        run: |
+          cat > api_key.json << EOF
+          {
+            "key_id": "${{ secrets.APPLE_API_KEY_ID }}",
+            "issuer_id": "${{ secrets.APPLE_API_ISSUER_ID }}",
+            "key": "${{ secrets.APPLE_API_KEY }}"
+          }
+          EOF
+
+      - name: Notarize the app bundle
+        run: |
+          # Create a ZIP for notarization
+          ditto -c -k --keepParent Rustwave.app Rustwave.zip
+
+          # Submit for notarization
+          rcodesign notary-submit \
+            --api-key-path api_key.json \
+            --wait \
+            Rustwave.zip
+
+          # Staple the notarization ticket
+          xcrun stapler staple Rustwave.app
+
+          # Verify notarization
+          xcrun stapler validate Rustwave.app
+          spctl -a -v Rustwave.app
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          rm -f certificate.p12 api_key.json Rustwave.zip
+
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="rustwave-macos-intel-v${VERSION}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" Rustwave.app
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustwave-macos-intel
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 30
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-arm:
-    runs-on: macos-latest  # ARM runner
+    runs-on: macos-latest # ARM runner
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
 
-    - name: Cache Cargo dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-arm-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-arm-cargo-
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-arm-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-arm-cargo-
 
-    - name: Create .env file
-      run: |
-        cat > .env << EOF
-        CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
-        CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
-        REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
-        EOF
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
+          CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
+          REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
+          EOF
 
-    - name: Build release binary
-      run: cargo build --release
+      - name: Build release binary
+        run: cargo build --release
 
-    - name: Extract version from Cargo.toml
-      id: version
-      run: |
-        VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
-        echo "Version: $VERSION"
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION"
 
-    - name: Create app bundle
-      run: |
-        rm -rf Rustwave.app
-        mkdir -p Rustwave.app/Contents/MacOS
-        mkdir -p Rustwave.app/Contents/Resources
+      - name: Create app bundle
+        run: |
+          rm -rf Rustwave.app
+          mkdir -p Rustwave.app/Contents/MacOS
+          mkdir -p Rustwave.app/Contents/Resources
 
-        cp target/release/rustwave Rustwave.app/Contents/MacOS/
-        cp .env Rustwave.app/Contents/MacOS/
-        cp -r assets Rustwave.app/Contents/MacOS/
+          cp target/release/rustwave Rustwave.app/Contents/MacOS/
+          cp .env Rustwave.app/Contents/MacOS/
+          cp -r assets Rustwave.app/Contents/MacOS/
 
-        cat > Rustwave.app/Contents/Info.plist << 'EOF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>CFBundleExecutable</key>
-            <string>rustwave</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.rustwave.app</string>
-            <key>CFBundleName</key>
-            <string>Rustwave</string>
-            <key>CFBundleDisplayName</key>
-            <string>Rustwave</string>
-            <key>CFBundleVersion</key>
-            <string>${VERSION}</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${VERSION}</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleSignature</key>
-            <string>????</string>
-            <key>CFBundleIconFile</key>
-            <string>AppIcon</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>11.0</string>
-            <key>NSHighResolutionCapable</key>
-            <true/>
-            <key>NSSupportsAutomaticGraphicsSwitching</key>
-            <true/>
-        </dict>
-        </plist>
-        EOF
+          cat > Rustwave.app/Contents/Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>rustwave</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.rustwave.app</string>
+              <key>CFBundleName</key>
+              <string>Rustwave</string>
+              <key>CFBundleDisplayName</key>
+              <string>Rustwave</string>
+              <key>CFBundleVersion</key>
+              <string>${VERSION}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${VERSION}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleSignature</key>
+              <string>????</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>11.0</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>NSSupportsAutomaticGraphicsSwitching</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
 
-        mkdir -p AppIcon.iconset
-        sips -z 16 16 assets/icon.png --out AppIcon.iconset/icon_16x16.png
-        sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_16x16@2x.png
-        sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_32x32.png
-        sips -z 64 64 assets/icon.png --out AppIcon.iconset/icon_32x32@2x.png
-        sips -z 128 128 assets/icon.png --out AppIcon.iconset/icon_128x128.png
-        sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_128x128@2x.png
-        sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_256x256.png
-        sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_256x256@2x.png
-        sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_512x512.png
-        cp assets/icon.png AppIcon.iconset/icon_512x512@2x.png
+          mkdir -p AppIcon.iconset
+          sips -z 16 16 assets/icon.png --out AppIcon.iconset/icon_16x16.png
+          sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_16x16@2x.png
+          sips -z 32 32 assets/icon.png --out AppIcon.iconset/icon_32x32.png
+          sips -z 64 64 assets/icon.png --out AppIcon.iconset/icon_32x32@2x.png
+          sips -z 128 128 assets/icon.png --out AppIcon.iconset/icon_128x128.png
+          sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_128x128@2x.png
+          sips -z 256 256 assets/icon.png --out AppIcon.iconset/icon_256x256.png
+          sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_256x256@2x.png
+          sips -z 512 512 assets/icon.png --out AppIcon.iconset/icon_512x512.png
+          cp assets/icon.png AppIcon.iconset/icon_512x512@2x.png
 
-        iconutil -c icns AppIcon.iconset
-        cp AppIcon.icns Rustwave.app/Contents/Resources/
+          iconutil -c icns AppIcon.iconset
+          cp AppIcon.icns Rustwave.app/Contents/Resources/
 
-        chmod +x Rustwave.app/Contents/MacOS/rustwave
+          chmod +x Rustwave.app/Contents/MacOS/rustwave
 
-    - name: Create archive
-      run: |
-        ARCHIVE_NAME="rustwave-macos-arm-v${VERSION}.tar.gz"
-        tar -czf "$ARCHIVE_NAME" Rustwave.app
-        echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+      - name: Install rcodesign
+        run: |
+          curl -L https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.27.0/apple-codesign-0.27.0-aarch64-apple-darwin.tar.gz -o rcodesign.tar.gz
+          tar -xzf rcodesign.tar.gz
+          chmod +x apple-codesign-*/rcodesign
+          sudo mv apple-codesign-*/rcodesign /usr/local/bin/
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: rustwave-macos-arm
-        path: ${{ env.ARCHIVE_NAME }}
-        retention-days: 30
+      - name: Setup signing certificate
+        run: |
+          echo "${{ secrets.MACOS_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
 
-    - name: Upload to release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ${{ env.ARCHIVE_NAME }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Code sign the app bundle
+        run: |
+          rcodesign sign \
+            --p12-file certificate.p12 \
+            --p12-password "${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" \
+            --code-signature-flags runtime \
+            Rustwave.app
+
+          # Verify the signature
+          codesign -v Rustwave.app
+          codesign -dvv Rustwave.app
+
+      - name: Create App Store Connect API key
+        run: |
+          cat > api_key.json << EOF
+          {
+            "key_id": "${{ secrets.APPLE_API_KEY_ID }}",
+            "issuer_id": "${{ secrets.APPLE_API_ISSUER_ID }}",
+            "key": "${{ secrets.APPLE_API_KEY }}"
+          }
+          EOF
+
+      - name: Notarize the app bundle
+        run: |
+          # Create a ZIP for notarization
+          ditto -c -k --keepParent Rustwave.app Rustwave.zip
+
+          # Submit for notarization
+          rcodesign notary-submit \
+            --api-key-path api_key.json \
+            --wait \
+            Rustwave.zip
+
+          # Staple the notarization ticket
+          xcrun stapler staple Rustwave.app
+
+          # Verify notarization
+          xcrun stapler validate Rustwave.app
+          spctl -a -v Rustwave.app
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          rm -f certificate.p12 api_key.json Rustwave.zip
+
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="rustwave-macos-arm-v${VERSION}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" Rustwave.app
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustwave-macos-arm
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 30
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux-x64:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
 
-    - name: Cache Cargo dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-x64-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-x64-cargo-
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-x64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-x64-cargo-
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libasound2-dev pkg-config libssl-dev libdbus-1-dev
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config libssl-dev libdbus-1-dev
 
-    - name: Create .env file
-      run: |
-        cat > .env << EOF
-        CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
-        CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
-        REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
-        EOF
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
+          CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
+          REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
+          EOF
 
-    - name: Build release binary
-      run: cargo build --release
+      - name: Build release binary
+        run: cargo build --release
 
-    - name: Extract version from Cargo.toml
-      id: version
-      run: |
-        VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
-        echo "Version: $VERSION"
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION"
 
-    - name: Create distribution folder
-      run: |
-        mkdir -p rustwave-linux-x64
-        mkdir -p rustwave-linux-x64/assets
-        cp target/release/rustwave rustwave-linux-x64/
-        cp .env rustwave-linux-x64/
-        cp -r assets/* rustwave-linux-x64/assets/
-        chmod +x rustwave-linux-x64/rustwave
+      - name: Create distribution folder
+        run: |
+          mkdir -p rustwave-linux-x64
+          mkdir -p rustwave-linux-x64/assets
+          cp target/release/rustwave rustwave-linux-x64/
+          cp .env rustwave-linux-x64/
+          cp -r assets/* rustwave-linux-x64/assets/
+          chmod +x rustwave-linux-x64/rustwave
 
-    - name: Create archive
-      run: |
-        ARCHIVE_NAME="rustwave-linux-x64-v${VERSION}.tar.gz"
-        tar -czf "$ARCHIVE_NAME" rustwave-linux-x64
-        echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="rustwave-linux-x64-v${VERSION}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" rustwave-linux-x64
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: rustwave-linux-x64
-        path: ${{ env.ARCHIVE_NAME }}
-        retention-days: 30
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustwave-linux-x64
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 30
 
-    - name: Upload to release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ${{ env.ARCHIVE_NAME }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux-arm64:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-        target: aarch64-unknown-linux-gnu
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-unknown-linux-gnu
 
-    - name: Cache Cargo dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-arm64-cargo-
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-arm64-cargo-
 
-    - name: Install cross-compilation tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libasound2-dev:arm64 pkg-config libssl-dev libdbus-1-dev
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libasound2-dev:arm64 pkg-config libssl-dev libdbus-1-dev
 
-        # Create cargo config for cross-compilation
-        mkdir -p .cargo
-        cat > .cargo/config.toml << EOF
-        [target.aarch64-unknown-linux-gnu]
-        linker = "aarch64-linux-gnu-gcc"
-        EOF
+          # Create cargo config for cross-compilation
+          mkdir -p .cargo
+          cat > .cargo/config.toml << EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
 
-    - name: Add ARM64 architecture
-      run: |
-        sudo dpkg --add-architecture arm64
-        sudo apt-get update
+      - name: Add ARM64 architecture
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
 
-    - name: Create .env file
-      run: |
-        cat > .env << EOF
-        CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
-        CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
-        REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
-        EOF
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          CLIENT_ID=${{ secrets.SOUNDCLOUD_CLIENT_ID }}
+          CLIENT_SECRET=${{ secrets.SOUNDCLOUD_CLIENT_SECRET }}
+          REDIRECT_URL=${{ secrets.SOUNDCLOUD_REDIRECT_URL }}
+          EOF
 
-    - name: Build release binary
-      run: cargo build --release --target aarch64-unknown-linux-gnu
+      - name: Build release binary
+        run: cargo build --release --target aarch64-unknown-linux-gnu
 
-    - name: Extract version from Cargo.toml
-      id: version
-      run: |
-        VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
-        echo "Version: $VERSION"
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -n1 | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Version: $VERSION"
 
-    - name: Create distribution folder
-      run: |
-        mkdir -p rustwave-linux-arm64
-        mkdir -p rustwave-linux-arm64/assets
-        cp target/aarch64-unknown-linux-gnu/release/rustwave rustwave-linux-arm64/
-        cp .env rustwave-linux-arm64/
-        cp -r assets/* rustwave-linux-arm64/assets/
-        chmod +x rustwave-linux-arm64/rustwave
+      - name: Create distribution folder
+        run: |
+          mkdir -p rustwave-linux-arm64
+          mkdir -p rustwave-linux-arm64/assets
+          cp target/aarch64-unknown-linux-gnu/release/rustwave rustwave-linux-arm64/
+          cp .env rustwave-linux-arm64/
+          cp -r assets/* rustwave-linux-arm64/assets/
+          chmod +x rustwave-linux-arm64/rustwave
 
-    - name: Create archive
-      run: |
-        ARCHIVE_NAME="rustwave-linux-arm64-v${VERSION}.tar.gz"
-        tar -czf "$ARCHIVE_NAME" rustwave-linux-arm64
-        echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="rustwave-linux-arm64-v${VERSION}.tar.gz"
+          tar -czf "$ARCHIVE_NAME" rustwave-linux-arm64
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: rustwave-linux-arm64
-        path: ${{ env.ARCHIVE_NAME }}
-        retention-days: 30
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustwave-linux-arm64
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 30
 
-    - name: Upload to release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ${{ env.ARCHIVE_NAME }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

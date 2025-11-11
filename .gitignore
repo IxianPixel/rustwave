@@ -4,3 +4,7 @@
 *.iconset
 *.icns
 *.DS_Store
+# Added by goreleaser init:
+dist/
+.intentionally-empty-file.o
+target/
