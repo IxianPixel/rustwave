@@ -245,12 +245,12 @@ jobs:
           # Decode the base64-encoded .p8 key
           echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > AuthKey.p8
 
-          # Create the JSON using jq to properly escape strings
+          # Create the JSON using jq with the correct field names for rcodesign
           jq -n \
             --arg key_id "${{ secrets.APPLE_API_KEY_ID }}" \
             --arg issuer_id "${{ secrets.APPLE_API_ISSUER_ID }}" \
-            --rawfile key AuthKey.p8 \
-            '{key_id: $key_id, issuer_id: $issuer_id, key: $key}' > api_key.json
+            --rawfile private_key AuthKey.p8 \
+            '{issuer_id: $issuer_id, key_id: $key_id, private_key: $private_key}' > api_key.json
 
       - name: Notarize the app bundle
         run: |
@@ -426,12 +426,12 @@ jobs:
           # Decode the base64-encoded .p8 key
           echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > AuthKey.p8
 
-          # Create the JSON using jq to properly escape strings
+          # Create the JSON using jq with the correct field names for rcodesign
           jq -n \
             --arg key_id "${{ secrets.APPLE_API_KEY_ID }}" \
             --arg issuer_id "${{ secrets.APPLE_API_ISSUER_ID }}" \
-            --rawfile key AuthKey.p8 \
-            '{key_id: $key_id, issuer_id: $issuer_id, key: $key}' > api_key.json
+            --rawfile private_key AuthKey.p8 \
+            '{issuer_id: $issuer_id, key_id: $key_id, private_key: $private_key}' > api_key.json
 
       - name: Notarize the app bundle
         run: |
