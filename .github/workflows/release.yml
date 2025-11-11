@@ -245,21 +245,16 @@ jobs:
           # Decode the base64-encoded .p8 key
           echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > AuthKey.p8
 
-          # Create the JSON using jq with the correct field names for rcodesign
-          jq -n \
-            --arg key_id "${{ secrets.APPLE_API_KEY_ID }}" \
-            --arg issuer_id "${{ secrets.APPLE_API_ISSUER_ID }}" \
-            --rawfile private_key AuthKey.p8 \
-            '{issuer_id: $issuer_id, key_id: $key_id, private_key: $private_key}' > api_key.json
-
       - name: Notarize the app bundle
         run: |
           # Create a ZIP for notarization
           ditto -c -k --keepParent Rustwave.app Rustwave.zip
 
-          # Submit for notarization
+          # Submit for notarization using individual parameters
           rcodesign notary-submit \
-            --api-key-path api_key.json \
+            --api-issuer "${{ secrets.APPLE_API_ISSUER_ID }}" \
+            --api-key "${{ secrets.APPLE_API_KEY_ID }}" \
+            --api-key-path AuthKey.p8 \
             --wait \
             Rustwave.zip
 
@@ -273,7 +268,7 @@ jobs:
       - name: Cleanup secrets
         if: always()
         run: |
-          rm -f certificate.p12 api_key.json AuthKey.p8 Rustwave.zip
+          rm -f certificate.p12 AuthKey.p8 Rustwave.zip
 
       - name: Create archive
         run: |
@@ -426,21 +421,16 @@ jobs:
           # Decode the base64-encoded .p8 key
           echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > AuthKey.p8
 
-          # Create the JSON using jq with the correct field names for rcodesign
-          jq -n \
-            --arg key_id "${{ secrets.APPLE_API_KEY_ID }}" \
-            --arg issuer_id "${{ secrets.APPLE_API_ISSUER_ID }}" \
-            --rawfile private_key AuthKey.p8 \
-            '{issuer_id: $issuer_id, key_id: $key_id, private_key: $private_key}' > api_key.json
-
       - name: Notarize the app bundle
         run: |
           # Create a ZIP for notarization
           ditto -c -k --keepParent Rustwave.app Rustwave.zip
 
-          # Submit for notarization
+          # Submit for notarization using individual parameters
           rcodesign notary-submit \
-            --api-key-path api_key.json \
+            --api-issuer "${{ secrets.APPLE_API_ISSUER_ID }}" \
+            --api-key "${{ secrets.APPLE_API_KEY_ID }}" \
+            --api-key-path AuthKey.p8 \
             --wait \
             Rustwave.zip
 
@@ -454,7 +444,7 @@ jobs:
       - name: Cleanup secrets
         if: always()
         run: |
-          rm -f certificate.p12 api_key.json AuthKey.p8 Rustwave.zip
+          rm -f certificate.p12 AuthKey.p8 Rustwave.zip
 
       - name: Create archive
         run: |
