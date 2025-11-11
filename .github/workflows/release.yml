@@ -14,9 +14,9 @@ name: Multi-Platform Release
 # APPLE_API_ISSUER_ID: App Store Connect API Issuer ID
 #   - Found in App Store Connect > Users and Access > Keys > Issuer ID
 #
-# APPLE_API_KEY: Base64-encoded App Store Connect API Key (.p8 file)
+# APPLE_API_KEY: Raw content of App Store Connect API Key (.p8 file)
 #   - Download from App Store Connect > Users and Access > Keys
-#   - Encode: base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy
+#   - Copy the entire file content (including BEGIN/END lines)
 #
 # APPLE_TEAM_ID: Your Apple Developer Team ID (10 character alphanumeric)
 #   - Found in App Store Connect or developer.apple.com/account
@@ -242,8 +242,10 @@ jobs:
 
       - name: Create App Store Connect API key
         run: |
-          # Decode the base64-encoded .p8 key
-          echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > AuthKey.p8
+          # Write the .p8 key directly from the secret
+          cat > AuthKey.p8 << 'EOF'
+          ${{ secrets.APPLE_API_KEY }}
+          EOF
 
       - name: Notarize the app bundle
         run: |
@@ -418,8 +420,10 @@ jobs:
 
       - name: Create App Store Connect API key
         run: |
-          # Decode the base64-encoded .p8 key
-          echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > AuthKey.p8
+          # Write the .p8 key directly from the secret
+          cat > AuthKey.p8 << 'EOF'
+          ${{ secrets.APPLE_API_KEY }}
+          EOF
 
       - name: Notarize the app bundle
         run: |
