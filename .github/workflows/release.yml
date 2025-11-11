@@ -164,8 +164,8 @@ jobs:
           mkdir -p Rustwave.app/Contents/Resources
 
           cp target/release/rustwave Rustwave.app/Contents/MacOS/
-          cp .env Rustwave.app/Contents/MacOS/
-          cp -r assets Rustwave.app/Contents/MacOS/
+          cp .env Rustwave.app/Contents/Resources/
+          cp -r assets Rustwave.app/Contents/Resources/
 
           cat > Rustwave.app/Contents/Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -343,8 +343,8 @@ jobs:
           mkdir -p Rustwave.app/Contents/Resources
 
           cp target/release/rustwave Rustwave.app/Contents/MacOS/
-          cp .env Rustwave.app/Contents/MacOS/
-          cp -r assets Rustwave.app/Contents/MacOS/
+          cp .env Rustwave.app/Contents/Resources/
+          cp -r assets Rustwave.app/Contents/Resources/
 
           cat > Rustwave.app/Contents/Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>

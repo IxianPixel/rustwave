@@ -148,6 +148,16 @@ pub fn get_asset_path(relative_path: &str) -> String {
     if let Ok(exe_path) = std::env::current_exe()
         && let Some(exe_dir) = exe_path.parent()
     {
+        // For macOS app bundles: Contents/MacOS/exe -> Contents/Resources/assets/...
+        #[cfg(target_os = "macos")]
+        if let Some(contents_dir) = exe_dir.parent() {
+            let resources_path = contents_dir.join("Resources").join(relative_path);
+            if resources_path.exists() {
+                return resources_path.to_string_lossy().to_string();
+            }
+        }
+
+        // For other platforms or non-bundled macOS builds
         let asset_path = exe_dir.join(relative_path);
         if asset_path.exists() {
             return asset_path.to_string_lossy().to_string();
