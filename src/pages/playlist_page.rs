@@ -25,7 +25,6 @@ pub enum PlaylistPageMessage {
     TrackLikedWithToken(u64, TokenManager),
     ApiErrorWithToken(String, TokenManager),
     LoadUser(String),
-    LoadNothing(SoundCloudPlaylist),
 }
 
 type Mp = PlaylistPageMessage;
@@ -112,10 +111,6 @@ impl Page for PlaylistPage {
                     debug!("Loading user {}", user_urn);
                     let (user_page, task) = UserPage::new(self.token_manager.clone(), user_urn);
                     return (Some(Box::new(user_page)), task);
-                }
-                PlaylistPageMessage::LoadNothing(_playlist_urn) => {
-                    debug!("This function does nothing but covers the case");
-                    return (None, Task::none());
                 }
             }
         }

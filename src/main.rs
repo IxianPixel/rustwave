@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::managers::{AudioManager, QueueManager};
-use crate::pages::{AuthPage, LikesPage};
+use crate::pages::AuthPage;
 use iced::widget::image::Handle;
 use iced::{
     Event, Length, Subscription, Task,

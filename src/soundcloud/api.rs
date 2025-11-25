@@ -8,31 +8,6 @@ use crate::
     }
 ;
 
-pub async fn get_liked_tracks(
-    access_token: AccessToken,
-) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
-    let response = c
-        .get("https://api.soundcloud.com/me/likes/tracks")
-        .query(&[
-            ("access", "playable,blocked"),
-            ("limit", "50"),
-            ("linked_partitioning", "true"),
-        ])
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
-        return Err(format!("HTTP {} error: {}", status, error_text).into());
-    }
-
-    let body = response.json::<SoundCloudTracks>().await?;
-    Ok(body)
-}
-
 pub async fn get_liked_tracks_paginated(
     access_token: AccessToken,
     next_href: Option<String>,
@@ -62,28 +37,6 @@ pub async fn get_liked_tracks_paginated(
 
     let body = response.json::<SoundCloudTracks>().await?;
     Ok(body)
-}
-
-pub async fn get_activity_feed(
-    access_token: AccessToken,
-) -> Result<Vec<SoundCloudTrack>, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
-    let response = c
-        .get("https://api.soundcloud.com/me/activities/tracks")
-        .query(&[("access", "playable,blocked"), ("limit", "50")])
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
-        return Err(format!("HTTP {} error: {}", status, error_text).into());
-    }
-
-    let body = response.json::<SoundCloudActivityCollection>().await?;
-    let tracks = body.collection.into_iter().map(|activity| activity.origin).collect();
-    Ok(tracks)
 }
 
 pub async fn get_activity_feed_paginated(
@@ -203,21 +156,6 @@ pub async fn search(
         search_playlists(access_token.clone(), query)
     )?;
     Ok(SearchResults { tracks, users, playlists })
-}
-
-pub async fn get_followed_tracks(
-    access_token: AccessToken,
-) -> Result<Vec<SoundCloudTrack>, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
-    let r = c
-        .get("https://api.soundcloud.com/me/followings/tracks?access=playable,blocked&limit=100")
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
-
-    let body = r.json::<Vec<SoundCloudTrack>>().await?;
-
-    Ok(body)
 }
 
 pub async fn like_track(
