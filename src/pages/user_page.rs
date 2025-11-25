@@ -5,7 +5,7 @@ use tracing::debug;
 
 use crate::managers::TrackListManager;
 use crate::models::{SoundCloudPlaylist, SoundCloudTrack, SoundCloudUser, SoundCloudUserProfile};
-use crate::pages::{FeedPage, LikesPage, PlaylistPage, SearchPage, SearchPageMessage};
+use crate::pages::{FeedPage, LikesPage, PlaylistPage, SearchPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use crate::utilities::get_asset_path;
@@ -20,8 +20,6 @@ use iced::widget::{Scrollable, column, row, text};
 pub enum UserPageMessage {
     LoadUser,
     UserProfileLoaded(SoundCloudUserProfile, TokenManager),
-    UserImageLoaded(String, Handle),
-    UserImageLoadFailed(String),
     PlaylistImageLoaded(String, Handle),
     PlaylistImageLoadFailed(String),
     ApiErrorWithToken(String, TokenManager),
@@ -150,8 +148,6 @@ impl Page for UserPage {
                     self.playlist_images.insert(urn, handle);
                     return (None, Task::none());
                 }
-                UserPageMessage::UserImageLoaded(_, _handle) => todo!(),
-                UserPageMessage::UserImageLoadFailed(_) => todo!(),
                 UserPageMessage::ApiErrorWithToken(_error_msg, token_manager) => {
                     self.token_manager = token_manager;
                     self.track_load_failed = true;

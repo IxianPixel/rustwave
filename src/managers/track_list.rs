@@ -42,6 +42,7 @@ impl TrackListManager {
         self.tracks.append(&mut tracks);
     }
 
+    #[allow(dead_code)]
     pub fn current_track_id(&self) -> u64 {
         self.current_track_id
     }

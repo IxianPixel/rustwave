@@ -77,19 +77,6 @@ impl StoredToken {
             .as_ref()
             .map(|rt| RefreshToken::new(rt.clone()))
     }
-
-    fn get_refresh_token_age_days(&self) -> u64 {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        (now - self.created_at) / (24 * 60 * 60)
-    }
-
-    fn is_refresh_token_old(&self) -> bool {
-        // SoundCloud refresh tokens may expire after some time (30-90 days typically)
-        self.get_refresh_token_age_days() > 30
-    }
 }
 
 struct TokenStorage {
@@ -226,37 +213,6 @@ impl TokenManager {
         }
 
         Ok(())
-    }
-
-    pub async fn handle_auth_error(&mut self) -> Result<(), AuthError> {
-        // When an API call fails with auth error, try to refresh the token
-        if let Some(refresh_token) = &self.refresh_token {
-            if let Ok(new_token) = refresh_access_token(refresh_token.clone()).await {
-                info!("Successfully refreshed OAuth token after auth error");
-                self.storage.save_token(new_token.clone())?;
-
-                // Update the current token
-                let mut current_token = self.current_token.lock().unwrap();
-                *current_token = new_token.access_token().clone();
-
-                // Update the refresh token if a new one was provided
-                if let Some(new_refresh_token) = new_token.refresh_token() {
-                    self.refresh_token = Some(new_refresh_token.clone());
-                }
-
-                return Ok(());
-            } else {
-                return Err(AuthError::OAuth(
-                    "Failed to refresh token after auth error".to_string(),
-                ));
-            }
-        }
-
-        // If refresh failed, we need to re-authenticate
-        warn!("Token refresh failed, need to re-authenticate");
-        Err(AuthError::OAuth(
-            "Token refresh failed, need to re-authenticate".to_string(),
-        ))
     }
 }
 
@@ -415,11 +371,6 @@ async fn refresh_access_token(
             }
         }
     }
-}
-
-pub async fn clear_stored_token() -> Result<(), AuthError> {
-    let storage = TokenStorage::new()?;
-    storage.clear_token()
 }
 
 #[derive(Debug)]

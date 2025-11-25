@@ -20,7 +20,6 @@ pub enum FeedPageMessage {
     LoadFeed,
     LoadMoreFeed,
     Scrolled(Viewport),
-    FeedLoadedWithToken(Vec<SoundCloudTrack>, TokenManager),
     FeedCollectionLoadedWithToken(SoundCloudActivityCollection, TokenManager),
     PlayTrack(SoundCloudTrack),
     ImageLoaded(u64, Handle),
@@ -123,19 +122,6 @@ impl Page for FeedPage {
                     }
 
                     return (None, Task::none());
-                }
-                FeedPageMessage::FeedLoadedWithToken(tracks, token_manager) => {
-                    self.token_manager = token_manager;
-                    self.track_load_failed = false;
-                    self.track_list.set_tracks(tracks);
-
-                    // Create tasks to load images for all tracks
-                    let image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| Message::FeedPage(Mf::ImageLoaded(track_id, handle)),
-                        |track_id| Message::FeedPage(Mf::ImageLoadFailed(track_id)),
-                    );
-
-                    return (None, Task::batch(image_tasks));
                 }
                 FeedPageMessage::FeedCollectionLoadedWithToken(collection, token_manager) => {
                     self.token_manager = token_manager;

@@ -1,7 +1,6 @@
 use crate::managers::TrackListManager;
 use crate::models::SoundCloudTrack;
-use crate::pages::auth_page::AuthPage;
-use crate::pages::{FeedPage, FeedPageMessage, SearchPage, UserPage};
+use crate::pages::{FeedPage, SearchPage, UserPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use crate::{Message, Page};

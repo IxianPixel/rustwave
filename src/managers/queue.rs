@@ -69,6 +69,7 @@ impl QueueManager {
     }
 
     /// Check if there's a previous track available
+    #[allow(dead_code)]
     pub fn has_previous(&self) -> bool {
         if let Some(current) = self.current_index {
             current > 0
@@ -78,6 +79,7 @@ impl QueueManager {
     }
 
     /// Get the current queue as a vector for display purposes
+    #[allow(dead_code)]
     pub fn get_queue(&self) -> Vec<&SoundCloudTrack> {
         self.queue.iter().collect()
     }
@@ -93,6 +95,7 @@ impl QueueManager {
     }
 
     /// Clear the queue
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.queue.clear();
         self.current_index = None;
@@ -107,6 +110,7 @@ impl QueueManager {
     }
 
     /// Check if the queue is empty
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
