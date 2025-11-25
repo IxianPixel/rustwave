@@ -57,6 +57,7 @@ enum Message {
     MediaControlEvent(souvlaki::MediaControlEvent),
     NextTrack,
     PreviousTrack,
+    ToggleRepeatMode,
     TrackEnded,
     StartQueue(
         crate::models::SoundCloudTrack,
@@ -296,14 +297,51 @@ impl MyApp {
                     Task::none()
                 }
             }
+            Message::ToggleRepeatMode => {
+                self.settings.repeat_mode = self.settings.repeat_mode.toggle();
+
+                if let Err(e) = config::save_settings(&self.settings) {
+                    eprintln!("Failed to save settings: {}", e);
+                }
+
+                Task::none()
+            }
             Message::TrackEnded => {
-                // Automatically play next track when current track ends
-                if self.queue_manager.has_next() {
-                    Task::done(Message::NextTrack)
-                } else {
-                    // Queue finished, stop playback
-                    self.audio_manager.clear();
-                    Task::none()
+                match self.settings.repeat_mode {
+                    config::RepeatMode::One => {
+                        // Repeat current track - reload from stored data
+                        if let Some(track_data) = self.audio_manager.current_track_data.clone() {
+                            // Reload the track using the stored data
+                            if let Err(e) = self.audio_manager.load_track(tokio_util::bytes::Bytes::from(track_data)) {
+                                eprintln!("Failed to reload track for repeat: {}", e);
+                            }
+                        }
+                        Task::none()
+                    }
+                    config::RepeatMode::All => {
+                        // Try to play next track, or restart queue
+                        if self.queue_manager.has_next() {
+                            Task::done(Message::NextTrack)
+                        } else if self.queue_manager.queue_length() > 0 {
+                            // Queue finished - restart from beginning
+                            if let Some(token_manager) = self.token_manager.clone() {
+                                self.queue_manager.reset_to_beginning();
+                                if let Some(first_track) = self.queue_manager.current_track().cloned() {
+                                    self.start_track_download(&first_track, token_manager)
+                                } else {
+                                    Task::none()
+                                }
+                            } else {
+                                eprintln!("No token manager available for queue restart");
+                                self.audio_manager.clear();
+                                Task::none()
+                            }
+                        } else {
+                            // Empty queue, stop playback
+                            self.audio_manager.clear();
+                            Task::none()
+                        }
+                    }
                 }
             }
             _ => Task::none(),

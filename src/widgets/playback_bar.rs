@@ -88,13 +88,19 @@ pub fn get_playback_bar<'a>(
                         )
                         .on_press(Message::NextTrack),
                         button(
-                            Svg::new(get_asset_path("assets/repeat.svg"))
-                                .width(22)
-                                .height(22)
-                                .style(|_theme, _status| svg::Style {
-                                    color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                }),
-                        ),
+                            Svg::new(get_asset_path(
+                                match settings.repeat_mode {
+                                    config::RepeatMode::All => "assets/repeat.svg",
+                                    config::RepeatMode::One => "assets/repeat_one.svg",
+                                }
+                            ))
+                            .width(22)
+                            .height(22)
+                            .style(|_theme, _status| svg::Style {
+                                color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                            }),
+                        )
+                        .on_press(Message::ToggleRepeatMode),
                     ]
                     .spacing(5),
                     queue_text,
