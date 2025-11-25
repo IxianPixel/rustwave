@@ -393,6 +393,7 @@ impl MyApp {
                 self.audio_manager.track_duration,
                 self.audio_manager.progress_bar_value,
                 self.audio_manager.stream_loading,
+                !self.audio_manager.is_empty() && !self.audio_manager.is_paused(),
                 self.queue_manager.current_position(),
                 self.queue_manager.queue_length(),
                 self.waveform_peaks.clone(),

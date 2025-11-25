@@ -21,6 +21,7 @@ pub fn get_playback_bar<'a>(
     track_duration: Duration,
     progress_bar_value: f32,
     stream_loading: bool,
+    is_playing: bool,
     current_position: Option<usize>,
     queue_length: usize,
     waveform_peaks: Option<Vec<f32>>,
@@ -70,12 +71,18 @@ pub fn get_playback_bar<'a>(
                         )
                         .on_press(Message::PreviousTrack),
                         button(
-                            Svg::new(get_asset_path("assets/play.svg"))
-                                .width(22)
-                                .height(22)
-                                .style(|_theme, _status| svg::Style {
-                                    color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                }),
+                            Svg::new(get_asset_path(
+                                if is_playing {
+                                    "assets/pause.svg"
+                                } else {
+                                    "assets/play.svg"
+                                }
+                            ))
+                            .width(22)
+                            .height(22)
+                            .style(|_theme, _status| svg::Style {
+                                color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                            }),
                         )
                         .on_press(Message::PlayPausePlayback),
                         button(
