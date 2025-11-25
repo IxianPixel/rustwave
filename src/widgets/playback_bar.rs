@@ -1,12 +1,14 @@
+use crate::Message;
 use crate::config;
 use crate::utilities::{DurationFormat, get_asset_path};
 use crate::widgets;
-use crate::Message;
 use iced::widget::image::Handle;
 use iced::{
     Color, Length,
     alignment::Vertical,
-    widget::{Space, Svg, button, column, container, horizontal_rule, image, row, slider, svg, text},
+    widget::{
+        Space, Svg, button, column, container, horizontal_rule, image, row, slider, svg, text,
+    },
 };
 use std::time::Duration;
 
@@ -19,6 +21,7 @@ pub fn get_playback_bar<'a>(
     track_duration: Duration,
     progress_bar_value: f32,
     stream_loading: bool,
+    is_playing: bool,
     current_position: Option<usize>,
     queue_length: usize,
     waveform_peaks: Option<Vec<f32>>,
@@ -31,11 +34,7 @@ pub fn get_playback_bar<'a>(
     };
 
     let queue_text = if let Some(current_pos) = current_position {
-        text(format!(
-            "Queue: {} of {}",
-            current_pos + 1,
-            queue_length
-        ))
+        text(format!("Queue: {} of {}", current_pos + 1, queue_length))
     } else {
         text("Queue: Empty")
     };
@@ -48,8 +47,7 @@ pub fn get_playback_bar<'a>(
                 if stream_loading {
                     text("Loading stream...")
                 } else {
-                    text(format!("Now Playing: {}", title))
-                        .shaping(text::Shaping::Advanced)
+                    text(format!("Now Playing: {}", title)).shaping(text::Shaping::Advanced)
                 },
                 text(format!("User: {}", user)).shaping(text::Shaping::Advanced),
                 text(format!(
@@ -63,9 +61,53 @@ pub fn get_playback_bar<'a>(
             container(
                 column![
                     row![
-                        button("Previous").on_press(Message::PreviousTrack),
-                        button("Play/Pause").on_press(Message::PlayPausePlayback),
-                        button("Next").on_press(Message::NextTrack),
+                        button(
+                            Svg::new(get_asset_path("assets/previous.svg"))
+                                .width(22)
+                                .height(22)
+                                .style(|_theme, _status| svg::Style {
+                                    color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                }),
+                        )
+                        .on_press(Message::PreviousTrack),
+                        button(
+                            Svg::new(get_asset_path(
+                                if is_playing {
+                                    "assets/pause.svg"
+                                } else {
+                                    "assets/play.svg"
+                                }
+                            ))
+                            .width(22)
+                            .height(22)
+                            .style(|_theme, _status| svg::Style {
+                                color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                            }),
+                        )
+                        .on_press(Message::PlayPausePlayback),
+                        button(
+                            Svg::new(get_asset_path("assets/next.svg"))
+                                .width(22)
+                                .height(22)
+                                .style(|_theme, _status| svg::Style {
+                                    color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                }),
+                        )
+                        .on_press(Message::NextTrack),
+                        button(
+                            Svg::new(get_asset_path(
+                                match settings.repeat_mode {
+                                    config::RepeatMode::All => "assets/repeat.svg",
+                                    config::RepeatMode::One => "assets/repeat_one.svg",
+                                }
+                            ))
+                            .width(22)
+                            .height(22)
+                            .style(|_theme, _status| svg::Style {
+                                color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                            }),
+                        )
+                        .on_press(Message::ToggleRepeatMode),
                     ]
                     .spacing(5),
                     queue_text,
@@ -108,13 +150,9 @@ pub fn get_playback_bar<'a>(
         horizontal_rule(5.0),
         if matches!(settings.seekbar_type, config::SeekbarType::Slider) {
             row![
-                slider(
-                    0.0..=100.0,
-                    progress_bar_value,
-                    Message::SeekToPosition
-                )
-                .width(Length::Fill)
-                .step(0.1),
+                slider(0.0..=100.0, progress_bar_value, Message::SeekToPosition)
+                    .width(Length::Fill)
+                    .step(0.1),
             ]
             .padding(5)
         } else {

@@ -42,9 +42,31 @@ impl Default for SeekbarType {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RepeatMode {
+    All,
+    One,
+}
+
+impl Default for RepeatMode {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+impl RepeatMode {
+    pub fn toggle(&self) -> Self {
+        match self {
+            RepeatMode::All => RepeatMode::One,
+            RepeatMode::One => RepeatMode::All,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppSettings {
     pub seekbar_type: SeekbarType,
+    pub repeat_mode: RepeatMode,
 }
 
 pub fn get_settings_path() -> PathBuf {

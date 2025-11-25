@@ -99,6 +99,13 @@ impl QueueManager {
         self.original_tracks.clear();
     }
 
+    /// Reset the queue position to the first track
+    pub fn reset_to_beginning(&mut self) {
+        if !self.queue.is_empty() {
+            self.current_index = Some(0);
+        }
+    }
+
     /// Check if the queue is empty
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
