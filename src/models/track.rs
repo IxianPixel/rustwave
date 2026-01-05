@@ -25,4 +25,8 @@ pub struct SoundCloudTrack {
     pub artwork_url: String,
     #[serde(deserialize_with = "deserialize_null_default")]
     pub waveform_url: String,
+    #[serde(deserialize_with = "deserialize_null_default")]
+    pub genre: String,
+    #[serde(deserialize_with = "deserialize_null_default")]
+    pub created_at: String,
 }

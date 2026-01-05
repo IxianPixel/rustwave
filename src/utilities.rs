@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use iced::widget::{image::Handle};
-use crate::{models::SoundCloudTrack};
+use crate::models::SoundCloudTrack;
 use ::image::load_from_memory;
+use iced::widget::image::Handle;
 
 pub trait DurationFormat {
     fn format_as_mmss(&self) -> String;
@@ -18,6 +18,18 @@ impl DurationFormat for Duration {
     }
 }
 
+pub fn truncate_string(s: impl AsRef<str>, max_len: usize) -> String {
+    let s = s.as_ref();
+    if s.chars().count() <= max_len {
+        s.to_string()
+    } else {
+        let ellipsis = "...";
+        let ellipsis_len = ellipsis.chars().count();
+        let take_len = max_len.saturating_sub(ellipsis_len);
+        s.chars().take(take_len).collect::<String>() + ellipsis
+    }
+}
+
 pub async fn download_image(url: &str) -> Result<Handle, Box<dyn std::error::Error + Send + Sync>> {
     let response = reqwest::get(url).await?;
     let bytes = response.bytes().await?;
@@ -25,14 +37,19 @@ pub async fn download_image(url: &str) -> Result<Handle, Box<dyn std::error::Err
 }
 
 /// Downloads waveform image and returns raw bytes for peak extraction
-pub async fn download_waveform_bytes(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn download_waveform_bytes(
+    url: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     let response = reqwest::get(url).await?;
     let bytes = response.bytes().await?;
     Ok(bytes.to_vec())
 }
 
 /// Extract peak data from waveform PNG for canvas rendering
-pub fn extract_waveform_peaks(waveform_bytes: &[u8], target_width: usize) -> Result<Vec<f32>, Box<dyn std::error::Error + Send + Sync>> {
+pub fn extract_waveform_peaks(
+    waveform_bytes: &[u8],
+    target_width: usize,
+) -> Result<Vec<f32>, Box<dyn std::error::Error + Send + Sync>> {
     // Load the waveform image
     let img = load_from_memory(waveform_bytes)?;
     let rgba_img = img.to_rgba8();
