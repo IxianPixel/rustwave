@@ -1,9 +1,9 @@
 use crate::Message;
 use crate::models::SoundCloudTrack;
 use crate::utilities::{DurationFormat, NumberFormat, get_asset_path};
-use iced::Color;
-use iced::widget::{MouseArea, Row, Svg, button, mouse_area, svg, text};
+use iced::widget::{MouseArea, Row, Space, Svg, button, mouse_area, svg, text};
 use iced::widget::{column, container, image, image::Handle, row};
+use iced::{Alignment, Color, Length};
 use std::time::Duration;
 
 pub fn get_track_widget<F, U, L>(
@@ -39,6 +39,13 @@ where
             .shaping(text::Shaping::Advanced)
             .color(Color::from_rgb(1.0, 0.0, 0.0))
     };
+
+    let meta_data = column!(
+        text(track.genre.clone()),
+        text(track.created_at[0..4].to_string().clone()),
+    )
+    .align_x(Alignment::End)
+    .padding(10);
 
     row = row.push(column![
         mouse_area(
@@ -84,8 +91,12 @@ where
             ])
             .on_press(on_play(track.clone())),
         ]
-        .spacing(5)
+        .spacing(5),
     ]);
+
+    row = row.push(Space::with_width(Length::Fill));
+
+    row = row.push(meta_data);
 
     mouse_area(container(row.spacing(10).padding(5))).on_press(on_play(track.clone()))
 }

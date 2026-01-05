@@ -1,10 +1,14 @@
-use crate::models::SoundCloudUser;
 use crate::Message;
-use iced::widget::{image, image::Handle, container, column};
-use iced::widget::{mouse_area, text, MouseArea, Row};
-use crate::utilities::{get_asset_path, NumberFormat};
+use crate::models::SoundCloudUser;
+use crate::utilities::{NumberFormat, get_asset_path, truncate_string};
+use iced::widget::{MouseArea, Row, mouse_area, text};
+use iced::widget::{column, container, image, image::Handle};
 
-pub fn get_user_widget<F>(user: &'_ SoundCloudUser, image_handle: Option<Handle>, load_user: F) -> MouseArea<'_, Message>
+pub fn get_user_widget<F>(
+    user: &'_ SoundCloudUser,
+    image_handle: Option<Handle>,
+    load_user: F,
+) -> MouseArea<'_, Message>
 where
     F: Fn(String) -> Message + 'static,
 {
@@ -14,17 +18,23 @@ where
     if let Some(handle) = image_handle {
         row = row.push(image(handle).width(100).height(100));
     } else {
-        row = row.push(image(get_asset_path("assets/icon.png")).width(100).height(100));
+        row = row.push(
+            image(get_asset_path("assets/icon.png"))
+                .width(100)
+                .height(100),
+        );
     }
 
-    row = row.push(
-        column![
-            text(user.username.clone()).shaping(text::Shaping::Advanced).size(20),
-            text(format!("{} followers", user.followers_count.unwrap_or(0).format_compact_number())).size(20),
-        ]
-    );
+    row = row.push(column![
+        text(truncate_string(user.username.clone(), 20))
+            .shaping(text::Shaping::Advanced)
+            .size(20),
+        text(format!(
+            "{} followers",
+            user.followers_count.unwrap_or(0).format_compact_number()
+        ))
+        .size(20),
+    ]);
 
-    mouse_area(
-        container(row.spacing(10).padding(5))
-    ).on_press(load_user(user.urn.clone()))
+    mouse_area(container(row.spacing(10).padding(5))).on_press(load_user(user.urn.clone()))
 }
