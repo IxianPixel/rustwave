@@ -13,6 +13,7 @@ use iced::{
 use std::time::Duration;
 
 /// Renders the playback control bar with album art, track info, and controls
+#[allow(clippy::too_many_arguments)]
 pub fn get_playback_bar<'a>(
     artwork: Option<Handle>,
     title: &'a str,
@@ -27,8 +28,8 @@ pub fn get_playback_bar<'a>(
     waveform_peaks: Option<Vec<f32>>,
     settings: &config::AppSettings,
 ) -> iced::Element<'a, Message> {
-    let album_image = if artwork.is_some() {
-        image(artwork.unwrap()).width(100).height(100)
+    let album_image = if let Some(handle) = artwork {
+        image(handle).width(100).height(100)
     } else {
         image("placeholder.png").width(100).height(100)
     };

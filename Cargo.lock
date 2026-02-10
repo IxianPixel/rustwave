@@ -2727,6 +2727,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "m3u8-rs"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f03cd3335fb5f2447755d45cda9c70f76013626a9db44374973791b0926a86c3"
+dependencies = [
+ "chrono",
+ "nom",
+]
+
+[[package]]
 name = "mach2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4285,13 +4295,15 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "rustwave"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "directories",
  "dotenv",
+ "futures",
  "iced",
  "image 0.25.8",
  "lazy_static",
+ "m3u8-rs",
  "oauth2",
  "reqwest",
  "rodio",

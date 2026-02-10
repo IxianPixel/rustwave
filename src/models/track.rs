@@ -3,6 +3,23 @@ use serde::{Deserialize, Serialize};
 use super::{SoundCloudUser, deserialize_null_default};
 
 #[derive(Deserialize, Debug, Clone)]
+pub struct SoundCloudStreams {
+    pub hls_aac_160_url: Option<String>,
+    pub hls_aac_96_url: Option<String>,
+    #[allow(dead_code)]
+    http_mp3_128_url: Option<String>,  // deprecated as of Dec 31, 2025
+    #[allow(dead_code)]
+    preview_mp3_128_url: Option<String>,
+}
+
+impl SoundCloudStreams {
+    pub fn get_hls_url(&self) -> Option<&String> {
+        self.hls_aac_160_url.as_ref()
+            .or(self.hls_aac_96_url.as_ref())
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct SoundCloudTracks {
     pub collection: Vec<SoundCloudTrack>,
     pub next_href: Option<String>,

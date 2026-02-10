@@ -68,15 +68,12 @@ impl Program<Message> for WaveformCanvas {
     ) -> (canvas::event::Status, Option<Message>) {
         use canvas::event::Status;
 
-        match event {
-            canvas::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) => {
-                if let Some(position) = cursor.position_in(bounds) {
-                    // Calculate seek position as percentage
-                    let percent = (position.x / bounds.width * 100.0).clamp(0.0, 100.0);
-                    return (Status::Captured, Some(Message::SeekToPosition(percent)));
-                }
-            }
-            _ => {}
+        if let canvas::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) = event
+            && let Some(position) = cursor.position_in(bounds)
+        {
+            // Calculate seek position as percentage
+            let percent = (position.x / bounds.width * 100.0).clamp(0.0, 100.0);
+            return (Status::Captured, Some(Message::SeekToPosition(percent)));
         }
 
         (Status::Ignored, None)

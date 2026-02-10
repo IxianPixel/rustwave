@@ -1,7 +1,6 @@
-use crate::models::{SearchResults, SoundCloudActivityCollection, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
+use crate::models::{SearchResults, SoundCloudActivityCollection, SoundCloudStreams, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
 use crate::soundcloud::api;
 use crate::soundcloud::auth::{AuthError, TokenManager};
-use tokio_util::bytes::Bytes;
 
 /// Helper functions that combine token refresh with API calls for use with Iced Tasks
 pub async fn load_feed_paginated_with_refresh(
@@ -138,17 +137,30 @@ pub async fn like_track_with_refresh(
     }
 }
 
-pub async fn get_track_data_with_refresh(
+pub async fn get_track_streams_with_refresh(
     mut token_manager: TokenManager,
-    stream_url: String,
-) -> Result<(Bytes, TokenManager), (AuthError, TokenManager)> {
+    track_id: u64,
+) -> Result<(SoundCloudStreams, TokenManager), (AuthError, TokenManager)> {
     match token_manager.get_fresh_token().await {
-        Ok(token) => match api::get_track_data(token, stream_url).await {
-            Ok(data) => Ok((data, token_manager)),
-            Err(_) => Err((
-                AuthError::Other("Failed to get track data".to_string()),
-                token_manager,
-            )),
+        Ok(token) => match api::get_track_streams(token, track_id).await {
+            Ok(streams) => Ok((streams, token_manager)),
+            Err(e) => {
+                let error_msg = format!("{}", e);
+                if error_msg.contains("401")
+                    || error_msg.contains("403")
+                    || error_msg.contains("Unauthorized")
+                {
+                    Err((
+                        AuthError::OAuth("Authentication failed while fetching streams".to_string()),
+                        token_manager,
+                    ))
+                } else {
+                    Err((
+                        AuthError::Other(format!("Failed to get track streams: {}", e)),
+                        token_manager,
+                    ))
+                }
+            }
         },
         Err(e) => Err((e, token_manager)),
     }
