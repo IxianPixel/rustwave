@@ -22,14 +22,15 @@ fn main() -> iced::Result {
     // Load the application icon
     let icon = window::icon::from_file_data(include_bytes!("../assets/icon.png"), None).ok();
 
-    iced::application("Rustwave", MyApp::update, MyApp::view)
-        .theme(|_| iced::Theme::CatppuccinMocha)
+    iced::application(MyApp::new, MyApp::update, MyApp::view)
+        .title("Rustwave")
+        .theme(|_: &MyApp| iced::Theme::CatppuccinMocha)
         .subscription(MyApp::subscription)
         .window(window::Settings {
             icon,
             ..Default::default()
         })
-        .run_with(MyApp::new)
+        .run()
 }
 
 mod config;
@@ -312,7 +313,10 @@ impl MyApp {
                         // Repeat current track - reload from stored data
                         if let Some(track_data) = self.audio_manager.current_track_data.clone() {
                             // Reload the track using the stored data
-                            if let Err(e) = self.audio_manager.load_track(tokio_util::bytes::Bytes::from(track_data)) {
+                            if let Err(e) = self
+                                .audio_manager
+                                .load_track(tokio_util::bytes::Bytes::from(track_data))
+                            {
                                 eprintln!("Failed to reload track for repeat: {}", e);
                             }
                         }
@@ -326,7 +330,9 @@ impl MyApp {
                             // Queue finished - restart from beginning
                             if let Some(token_manager) = self.token_manager.clone() {
                                 self.queue_manager.reset_to_beginning();
-                                if let Some(first_track) = self.queue_manager.current_track().cloned() {
+                                if let Some(first_track) =
+                                    self.queue_manager.current_track().cloned()
+                                {
                                     self.start_track_download(&first_track, token_manager)
                                 } else {
                                     Task::none()

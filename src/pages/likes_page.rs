@@ -5,15 +5,14 @@ use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use crate::{Message, Page};
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, column, row, text};
-use iced::widget::scrollable::Viewport;
+use iced::widget::{Scrollable, column, row, sensor, text};
 use iced::{Color, Length, Task};
 
 #[derive(Debug, Clone)]
 pub enum LikesPageMessage {
     LoadFavourites,
     LoadMoreFavourites,
-    Scrolled(Viewport),
+    RequestImage(u64),
     PlayTrack(SoundCloudTrack),
     ImageLoaded(u64, Handle),
     ImageLoadFailed(u64),
@@ -25,7 +24,7 @@ pub enum LikesPageMessage {
 }
 type Ml = LikesPageMessage;
 
-// Trigger loading more content when within 500 pixels of the bottom
+// Start loading the next page when the bottom sentinel is within 500px of the viewport
 const LOAD_MORE_THRESHOLD: f32 = 500.0;
 
 pub struct LikesPage {
@@ -61,7 +60,10 @@ impl Page for LikesPage {
                     return (
                         None,
                         Task::perform(
-                            api_helpers::load_favourites_paginated_with_refresh(token_manager, None),
+                            api_helpers::load_favourites_paginated_with_refresh(
+                                token_manager,
+                                None,
+                            ),
                             |result| match result {
                                 Ok((tracks, token_manager)) => Message::LikesPage(
                                     Ml::FavouritesLoadedWithToken(tracks, token_manager),
@@ -85,7 +87,10 @@ impl Page for LikesPage {
                     return (
                         None,
                         Task::perform(
-                            api_helpers::load_favourites_paginated_with_refresh(token_manager, next_href),
+                            api_helpers::load_favourites_paginated_with_refresh(
+                                token_manager,
+                                next_href,
+                            ),
                             |result| match result {
                                 Ok((tracks, token_manager)) => Message::LikesPage(
                                     Ml::FavouritesLoadedWithToken(tracks, token_manager),
@@ -96,25 +101,6 @@ impl Page for LikesPage {
                             },
                         ),
                     );
-                }
-                LikesPageMessage::Scrolled(viewport) => {
-                    // Check if we're near the bottom of the scrollable area
-                    let offset = viewport.absolute_offset();
-                    let viewport_height = viewport.bounds().height;
-                    let content_height = viewport.content_bounds().height;
-
-                    // Trigger load if within threshold of the bottom
-                    if offset.y + viewport_height + LOAD_MORE_THRESHOLD >= content_height {
-                        // Don't load if already loading or no next page
-                        if !self.is_loading && self.next_href.is_some() {
-                            return (
-                                None,
-                                Task::done(Message::LikesPage(Ml::LoadMoreFavourites)),
-                            );
-                        }
-                    }
-
-                    return (None, Task::none());
                 }
                 LikesPageMessage::PlayTrack(track) => {
                     self.track_list.set_current_track_id(track.id);
@@ -127,6 +113,16 @@ impl Page for LikesPage {
                             self.track_list.tracks().clone(),
                             self.token_manager.clone(),
                         )),
+                    );
+                }
+                LikesPageMessage::RequestImage(track_id) => {
+                    return (
+                        None,
+                        self.track_list.load_image_task(
+                            track_id,
+                            |id, handle| Message::LikesPage(Ml::ImageLoaded(id, handle)),
+                            |id| Message::LikesPage(Ml::ImageLoadFailed(id)),
+                        ),
                     );
                 }
                 LikesPageMessage::ImageLoaded(track_id, handle) => {
@@ -173,13 +169,8 @@ impl Page for LikesPage {
                         self.track_list.append_tracks(soundcloud_tracks.collection);
                     }
 
-                    // Create tasks to load images for all tracks
-                    let image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| Message::LikesPage(Ml::ImageLoaded(track_id, handle)),
-                        |track_id| Message::LikesPage(Ml::ImageLoadFailed(track_id)),
-                    );
-
-                    return (None, Task::batch(image_tasks));
+                    // Artwork now loads lazily per row via RequestImage; nothing to do here.
+                    return (None, Task::none());
                 }
                 LikesPageMessage::TrackLikedWithToken(track_id, token_manager) => {
                     self.token_manager = token_manager;
@@ -220,11 +211,21 @@ impl Page for LikesPage {
             |t| Message::LikesPage(Ml::PlayTrack(t)),
             |urn| Message::LikesPage(Ml::LoadUser(urn)),
             |t| Message::LikesPage(Ml::LikeTrack(t)),
+            |id| Message::LikesPage(Ml::RequestImage(id)),
         );
 
-        // Add loading indicator at the bottom
-        if self.is_loading {
-            tracks_column = tracks_column.push(text("Loading more tracks..."));
+        if self.next_href.is_some() {
+            // Bottom sentinel: fires LoadMoreFavourites when scrolled near the end.
+            // Keyed on the track count so it re-triggers after each page is appended.
+            tracks_column = tracks_column.push(
+                sensor(text("Loading more tracks..."))
+                    .on_show(|_| Message::LikesPage(Ml::LoadMoreFavourites))
+                    .anticipate(LOAD_MORE_THRESHOLD)
+                    .key(self.track_list.tracks().len()),
+            );
+        } else if self.is_loading {
+            // Initial load (no next page known yet)
+            tracks_column = tracks_column.push(text("Loading tracks..."));
         }
 
         column![
@@ -235,8 +236,7 @@ impl Page for LikesPage {
             }],
             Scrollable::new(tracks_column)
                 .height(Length::FillPortion(1))
-                .width(Length::FillPortion(1))
-                .on_scroll(|viewport| Message::LikesPage(Ml::Scrolled(viewport))),
+                .width(Length::FillPortion(1)),
         ]
         .into()
     }

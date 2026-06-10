@@ -14,7 +14,7 @@ use crate::{Message, Page};
 use iced::Color;
 use iced::Length;
 use iced::widget::image::{self, Handle};
-use iced::widget::{Scrollable, column, row, text};
+use iced::widget::{Scrollable, column, grid, row, text};
 
 #[derive(Debug, Clone)]
 pub enum UserPageMessage {
@@ -23,6 +23,7 @@ pub enum UserPageMessage {
     PlaylistImageLoaded(String, Handle),
     PlaylistImageLoadFailed(String),
     ApiErrorWithToken(String, TokenManager),
+    RequestTrackImage(u64),
     TrackImageLoaded(u64, Handle),
     TrackImageLoadFailed(u64),
     PlayTrack(SoundCloudTrack),
@@ -92,15 +93,7 @@ impl Page for UserPage {
                     self.playlists = profile.playlists.clone();
                     self.track_list.set_tracks(profile.tracks);
 
-                    // Create tasks to load images for all tracks
-                    let track_image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| {
-                            Message::UserPage(UserPageMessage::TrackImageLoaded(track_id, handle))
-                        },
-                        |track_id| {
-                            Message::UserPage(UserPageMessage::TrackImageLoadFailed(track_id))
-                        },
-                    );
+                    // Track artwork now loads lazily per row via RequestTrackImage.
 
                     // Create tasks to load images for all playlists
                     let playlist_image_tasks: Vec<Task<Message>> = self
@@ -125,9 +118,16 @@ impl Page for UserPage {
                         })
                         .collect();
 
+                    return (None, Task::batch(playlist_image_tasks));
+                }
+                UserPageMessage::RequestTrackImage(track_id) => {
                     return (
                         None,
-                        Task::batch(track_image_tasks.into_iter().chain(playlist_image_tasks)),
+                        self.track_list.load_image_task(
+                            track_id,
+                            |id, handle| Message::UserPage(Mu::TrackImageLoaded(id, handle)),
+                            |id| Message::UserPage(Mu::TrackImageLoadFailed(id)),
+                        ),
                     );
                 }
                 UserPageMessage::TrackImageLoaded(track_id, handle) => {
@@ -223,14 +223,20 @@ impl Page for UserPage {
             |t| Message::UserPage(UserPageMessage::PlayTrack(t)),
             |urn| Message::UserPage(UserPageMessage::NavigateToUser(urn)),
             |t| Message::UserPage(UserPageMessage::LikeTrack(t)),
+            |id| Message::UserPage(UserPageMessage::RequestTrackImage(id)),
         );
 
-        let playlists_column = self.playlists.iter().fold(column![], |col, playlist| {
+        // Responsive grid of playlist cards: column count adapts to available width.
+        let playlist_cells = self.playlists.iter().map(|playlist| {
             let image_handle = self.playlist_images.get(&playlist.user.urn).cloned();
-            col.push(get_playlist_widget(playlist, image_handle, |urn| {
+            iced::Element::from(get_playlist_widget(playlist, image_handle, |urn| {
                 Message::UserPage(UserPageMessage::LoadPlaylist(urn))
             }))
         });
+        let playlists_grid = grid(playlist_cells)
+            .fluid(300)
+            .spacing(10)
+            .height(Length::Shrink);
 
         column![
             row![if self.track_load_failed {
@@ -242,7 +248,7 @@ impl Page for UserPage {
                 Scrollable::new(tracks_column)
                     .height(Length::FillPortion(1))
                     .width(Length::FillPortion(1)),
-                Scrollable::new(playlists_column)
+                Scrollable::new(playlists_grid)
                     .height(Length::FillPortion(1))
                     .width(Length::FillPortion(1)),
             ]

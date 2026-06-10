@@ -12,18 +12,18 @@ where
 // Module declarations
 mod activity;
 mod item;
+mod message;
 mod playlist;
+mod search;
 mod track;
 mod user;
-mod message;
-mod search;
 
 // Re-exports to maintain the same public API
-pub use activity::{SoundCloudActivityCollection};
+pub use activity::SoundCloudActivityCollection;
 pub use playlist::{SoundCloudPlaylist, SoundCloudPlaylists};
-pub use track::{SoundCloudTrack, SoundCloudTracks, SoundCloudStreams};
-pub use user::{SoundCloudUser, SoundCloudUsers, SoundCloudUserProfile};
-pub use search::{SearchResults};
+pub use search::SearchResults;
+pub use track::{SoundCloudStreams, SoundCloudTrack, SoundCloudTracks};
+pub use user::{SoundCloudUser, SoundCloudUserProfile, SoundCloudUsers};
 
 // Note: CurrentScreen enum was referenced in the original models.rs but not defined there.
 // If this enum exists elsewhere, it should be moved to its appropriate module.

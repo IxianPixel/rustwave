@@ -11,15 +11,21 @@ pub async fn download_track_stream(
     track: &SoundCloudTrack,
 ) -> Result<(Bytes, Option<Handle>, Option<Vec<f32>>, TokenManager), (String, TokenManager)> {
     // First, get the streaming URLs from the /tracks/{id}/streams endpoint
-    let (streams, mut token_manager) = match api_helpers::get_track_streams_with_refresh(token_manager, track.id).await {
-        Ok((streams, tm)) => (streams, tm),
-        Err((error, tm)) => return Err((error.to_string(), tm)),
-    };
+    let (streams, mut token_manager) =
+        match api_helpers::get_track_streams_with_refresh(token_manager, track.id).await {
+            Ok((streams, tm)) => (streams, tm),
+            Err((error, tm)) => return Err((error.to_string(), tm)),
+        };
 
     // Get the HLS URL (prefer 160kbps, fall back to 96kbps)
     let hls_url = match streams.get_hls_url() {
         Some(url) => url.clone(),
-        None => return Err(("No HLS stream URL available for track".to_string(), token_manager)),
+        None => {
+            return Err((
+                "No HLS stream URL available for track".to_string(),
+                token_manager,
+            ));
+        }
     };
 
     println!("HLS Stream URL: {}", hls_url);
@@ -31,14 +37,22 @@ pub async fn download_track_stream(
     };
 
     // Download the HLS stream (all segments combined into one buffer)
-    let track_data = match api::download_hls_stream(access_token.secret().to_string(), &hls_url).await {
-        Ok(data) => data,
-        Err(e) => return Err((format!("Failed to download HLS stream: {}", e), token_manager)),
-    };
+    let track_data =
+        match api::download_hls_stream(access_token.secret().to_string(), &hls_url).await {
+            Ok(data) => data,
+            Err(e) => {
+                return Err((
+                    format!("Failed to download HLS stream: {}", e),
+                    token_manager,
+                ));
+            }
+        };
 
     // Try to get the image handle if we have an artwork URL
     let image_handle = if !track.artwork_url.is_empty() {
-        crate::utilities::download_image(&track.artwork_url).await.ok()
+        crate::utilities::download_image(&track.artwork_url)
+            .await
+            .ok()
     } else {
         None
     };

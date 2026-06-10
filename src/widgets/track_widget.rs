@@ -94,7 +94,7 @@ where
         .spacing(5),
     ]);
 
-    row = row.push(Space::with_width(Length::Fill));
+    row = row.push(Space::new().width(Length::Fill));
 
     row = row.push(meta_data);
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{deserialize_null_default,SoundCloudTrack, SoundCloudUser};
+use super::{SoundCloudTrack, SoundCloudUser, deserialize_null_default};
 
 #[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct SoundCloudPlaylist {

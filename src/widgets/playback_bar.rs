@@ -6,9 +6,7 @@ use iced::widget::image::Handle;
 use iced::{
     Color, Length,
     alignment::Vertical,
-    widget::{
-        Space, Svg, button, column, container, horizontal_rule, image, row, slider, svg, text,
-    },
+    widget::{Space, Svg, button, column, container, image, row, rule, slider, svg, text},
 };
 use std::time::Duration;
 
@@ -58,7 +56,7 @@ pub fn get_playback_bar<'a>(
                 )),
             ]
             .padding(5),
-            Space::with_width(Length::Fill),
+            Space::new().width(Length::Fill),
             container(
                 column![
                     row![
@@ -72,13 +70,11 @@ pub fn get_playback_bar<'a>(
                         )
                         .on_press(Message::PreviousTrack),
                         button(
-                            Svg::new(get_asset_path(
-                                if is_playing {
-                                    "assets/pause.svg"
-                                } else {
-                                    "assets/play.svg"
-                                }
-                            ))
+                            Svg::new(get_asset_path(if is_playing {
+                                "assets/pause.svg"
+                            } else {
+                                "assets/play.svg"
+                            }))
                             .width(22)
                             .height(22)
                             .style(|_theme, _status| svg::Style {
@@ -96,12 +92,10 @@ pub fn get_playback_bar<'a>(
                         )
                         .on_press(Message::NextTrack),
                         button(
-                            Svg::new(get_asset_path(
-                                match settings.repeat_mode {
-                                    config::RepeatMode::All => "assets/repeat.svg",
-                                    config::RepeatMode::One => "assets/repeat_one.svg",
-                                }
-                            ))
+                            Svg::new(get_asset_path(match settings.repeat_mode {
+                                config::RepeatMode::All => "assets/repeat.svg",
+                                config::RepeatMode::One => "assets/repeat_one.svg",
+                            }))
                             .width(22)
                             .height(22)
                             .style(|_theme, _status| svg::Style {
@@ -148,7 +142,7 @@ pub fn get_playback_bar<'a>(
             ),
         ],)
         .align_y(Vertical::Center),
-        horizontal_rule(5.0),
+        rule::horizontal(5.0),
         if matches!(settings.seekbar_type, config::SeekbarType::Slider) {
             row![
                 slider(0.0..=100.0, progress_bar_value, Message::SeekToPosition)
@@ -162,7 +156,7 @@ pub fn get_playback_bar<'a>(
                 progress_bar_value / 100.0,
             ),]
         },
-        horizontal_rule(5.0),
+        rule::horizontal(5.0),
     ]
     .into()
 }

@@ -55,7 +55,7 @@ pub struct AudioManager {
     pub progress_bar_value: f32,
     pub stream_loading: bool,
     pub current_track_data: Option<Vec<u8>>, // Store the current track data for backward seeking
-    position_offset: Duration, // Offset to add to sink.get_pos() after seeking
+    position_offset: Duration,               // Offset to add to sink.get_pos() after seeking
     media_controls: MediaControls,
     pub media_event_receiver: mpsc::Receiver<souvlaki::MediaControlEvent>,
 }

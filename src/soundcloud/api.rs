@@ -1,15 +1,21 @@
 use oauth2::AccessToken;
-use tokio_util::bytes::Bytes;
 use tokio::try_join;
+use tokio_util::bytes::Bytes;
 
-use crate::
-    models::{
-        SearchResults, SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists, SoundCloudStreams, SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile, SoundCloudUsers
-    }
-;
+use crate::models::{
+    SearchResults, SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists,
+    SoundCloudStreams, SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile,
+    SoundCloudUsers,
+};
 
 /// Type alias for async HLS download result
-type HlsDownloadFuture<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>> + Send + 'a>>;
+type HlsDownloadFuture<'a> = std::pin::Pin<
+    Box<
+        dyn std::future::Future<Output = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>>
+            + Send
+            + 'a,
+    >,
+>;
 
 pub async fn get_liked_tracks_paginated(
     access_token: AccessToken,
@@ -34,7 +40,10 @@ pub async fn get_liked_tracks_paginated(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error: {}", status, error_text).into());
     }
 
@@ -48,7 +57,8 @@ pub async fn get_activity_feed_paginated(
 ) -> Result<SoundCloudActivityCollection, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
 
-    let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/me/activities/tracks".to_string());
+    let url =
+        next_href.unwrap_or_else(|| "https://api.soundcloud.com/me/activities/tracks".to_string());
 
     let mut request = c.get(&url).bearer_auth(access_token.secret());
 
@@ -65,7 +75,10 @@ pub async fn get_activity_feed_paginated(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error: {}", status, error_text).into());
     }
 
@@ -92,7 +105,10 @@ pub async fn search_tracks(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error: {}", status, error_text).into());
     }
 
@@ -141,7 +157,10 @@ pub async fn search_user(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error: {}", status, error_text).into());
     }
 
@@ -158,7 +177,11 @@ pub async fn search(
         search_user(access_token.clone(), query),
         search_playlists(access_token.clone(), query)
     )?;
-    Ok(SearchResults { tracks, users, playlists })
+    Ok(SearchResults {
+        tracks,
+        users,
+        playlists,
+    })
 }
 
 pub async fn like_track(
@@ -172,7 +195,10 @@ pub async fn like_track(
     Ok(())
 }
 
-pub async fn get_user(access_token: AccessToken, user_urn: String) -> Result<SoundCloudUser, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn get_user(
+    access_token: AccessToken,
+    user_urn: String,
+) -> Result<SoundCloudUser, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
     let response = c
         .get(format!("https://api.soundcloud.com/users/{}", user_urn))
@@ -182,7 +208,10 @@ pub async fn get_user(access_token: AccessToken, user_urn: String) -> Result<Sou
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error: {}", status, error_text).into());
     }
 
@@ -191,11 +220,15 @@ pub async fn get_user(access_token: AccessToken, user_urn: String) -> Result<Sou
 }
 
 pub async fn get_user_tracks(
-    access_token: AccessToken, user_urn: String
+    access_token: AccessToken,
+    user_urn: String,
 ) -> Result<Vec<SoundCloudTrack>, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
     let response = c
-        .get(format!("https://api.soundcloud.com/users/{}/tracks", user_urn))
+        .get(format!(
+            "https://api.soundcloud.com/users/{}/tracks",
+            user_urn
+        ))
         .query(&[
             ("access", "playable,blocked"),
             ("limit", "50"),
@@ -207,7 +240,10 @@ pub async fn get_user_tracks(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error: {}", status, error_text).into());
     }
 
@@ -216,11 +252,15 @@ pub async fn get_user_tracks(
 }
 
 pub async fn get_user_playlists(
-    access_token: AccessToken, user_urn: String
+    access_token: AccessToken,
+    user_urn: String,
 ) -> Result<Vec<SoundCloudPlaylist>, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
     let response = c
-        .get(format!("https://api.soundcloud.com/users/{}/playlists", user_urn))
+        .get(format!(
+            "https://api.soundcloud.com/users/{}/playlists",
+            user_urn
+        ))
         .query(&[
             ("access", "playable,blocked"),
             ("limit", "50"),
@@ -232,7 +272,10 @@ pub async fn get_user_playlists(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error: {}", status, error_text).into());
     }
 
@@ -241,14 +284,19 @@ pub async fn get_user_playlists(
 }
 
 pub async fn get_user_profile(
-    access_token: AccessToken, user_urn: String
+    access_token: AccessToken,
+    user_urn: String,
 ) -> Result<SoundCloudUserProfile, Box<dyn std::error::Error + Send + Sync>> {
     let (user, tracks, playlists) = try_join!(
         get_user(access_token.clone(), user_urn.clone()),
         get_user_tracks(access_token.clone(), user_urn.clone()),
         get_user_playlists(access_token.clone(), user_urn.clone()),
     )?;
-    Ok(SoundCloudUserProfile { user, tracks, playlists })
+    Ok(SoundCloudUserProfile {
+        user,
+        tracks,
+        playlists,
+    })
 }
 
 /// Fetches the streaming URLs for a track from the /tracks/{id}/streams endpoint
@@ -267,7 +315,10 @@ pub async fn get_track_streams(
 
     let status = response.status();
     if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
         return Err(format!("HTTP {} error fetching streams: {}", status, error_text).into());
     }
 
@@ -279,7 +330,12 @@ pub async fn get_track_streams(
 fn find_box(data: &[u8], box_type: &[u8; 4]) -> Option<(usize, usize)> {
     let mut offset = 0;
     while offset + 8 <= data.len() {
-        let size = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]) as usize;
+        let size = u32::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
         let btype = &data[offset + 4..offset + 8];
 
         if size < 8 || offset + size > data.len() {
@@ -296,7 +352,11 @@ fn find_box(data: &[u8], box_type: &[u8; 4]) -> Option<(usize, usize)> {
 }
 
 /// Recursively searches for a box type within container boxes
-fn find_box_recursive(data: &[u8], box_type: &[u8; 4], containers: &[&[u8; 4]]) -> Option<(usize, usize)> {
+fn find_box_recursive(
+    data: &[u8],
+    box_type: &[u8; 4],
+    containers: &[&[u8; 4]],
+) -> Option<(usize, usize)> {
     // First check at current level
     if let Some(result) = find_box(data, box_type) {
         return Some(result);
@@ -309,7 +369,8 @@ fn find_box_recursive(data: &[u8], box_type: &[u8; 4], containers: &[&[u8; 4]]) 
             let inner_end = offset + size;
             if inner_start < inner_end
                 && inner_end <= data.len()
-                && let Some((inner_offset, inner_size)) = find_box_recursive(&data[inner_start..inner_end], box_type, containers)
+                && let Some((inner_offset, inner_size)) =
+                    find_box_recursive(&data[inner_start..inner_end], box_type, containers)
             {
                 return Some((inner_start + inner_offset, inner_size));
             }
@@ -324,7 +385,9 @@ fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Err
     // Parse AudioSpecificConfig from moov/trak/mdia/minf/stbl/stsd/mp4a/esds
     // We need: object_type, sample_rate_index, channel_config
 
-    let containers: &[&[u8; 4]] = &[b"moov", b"trak", b"mdia", b"minf", b"stbl", b"stsd", b"mp4a"];
+    let containers: &[&[u8; 4]] = &[
+        b"moov", b"trak", b"mdia", b"minf", b"stbl", b"stsd", b"mp4a",
+    ];
 
     // Find esds box
     let esds_data = if let Some((offset, size)) = find_box_recursive(data, b"esds", containers) {
@@ -368,7 +431,12 @@ fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Err
     let mut raw_aac_data = Vec::new();
     let mut offset = 0;
     while offset + 8 <= data.len() {
-        let size = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]) as usize;
+        let size = u32::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
         let btype = &data[offset + 4..offset + 8];
 
         if size < 8 || offset + size > data.len() {
@@ -392,10 +460,7 @@ fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Err
     }
 
     // Check if mdat already contains ADTS frames (some encoders include headers)
-    if raw_aac_data.len() >= 2
-        && raw_aac_data[0] == 0xFF
-        && (raw_aac_data[1] & 0xF0) == 0xF0
-    {
+    if raw_aac_data.len() >= 2 && raw_aac_data[0] == 0xFF && (raw_aac_data[1] & 0xF0) == 0xF0 {
         return Ok(raw_aac_data);
     }
 
@@ -407,8 +472,10 @@ fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Err
     let mut box_offset = 0;
     while box_offset + 8 <= data.len() {
         let box_size = u32::from_be_bytes([
-            data[box_offset], data[box_offset + 1],
-            data[box_offset + 2], data[box_offset + 3]
+            data[box_offset],
+            data[box_offset + 1],
+            data[box_offset + 2],
+            data[box_offset + 3],
         ]) as usize;
         let box_type = &data[box_offset + 4..box_offset + 8];
 
@@ -424,8 +491,10 @@ fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Err
                 let next_box_offset = box_offset + box_size;
                 if next_box_offset + 8 <= data.len() {
                     let next_size = u32::from_be_bytes([
-                        data[next_box_offset], data[next_box_offset + 1],
-                        data[next_box_offset + 2], data[next_box_offset + 3]
+                        data[next_box_offset],
+                        data[next_box_offset + 1],
+                        data[next_box_offset + 2],
+                        data[next_box_offset + 3],
                     ]) as usize;
                     let next_type = &data[next_box_offset + 4..next_box_offset + 8];
 
@@ -436,7 +505,8 @@ fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Err
                         for sample_size in &sample_sizes {
                             let sample_size = *sample_size as usize;
                             if sample_offset + sample_size <= mdat_payload.len() {
-                                let sample = &mdat_payload[sample_offset..sample_offset + sample_size];
+                                let sample =
+                                    &mdat_payload[sample_offset..sample_offset + sample_size];
 
                                 // Create ADTS header
                                 let frame_length = 7 + sample_size;
@@ -444,8 +514,11 @@ fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Err
                                 header[0] = 0xFF;
                                 header[1] = 0xF1;
                                 let profile = object_type.saturating_sub(1) & 0x03;
-                                header[2] = (profile << 6) | (sample_rate_index << 2) | ((channel_config >> 2) & 0x01);
-                                header[3] = ((channel_config & 0x03) << 6) | ((frame_length >> 11) & 0x03) as u8;
+                                header[2] = (profile << 6)
+                                    | (sample_rate_index << 2)
+                                    | ((channel_config >> 2) & 0x01);
+                                header[3] = ((channel_config & 0x03) << 6)
+                                    | ((frame_length >> 11) & 0x03) as u8;
                                 header[4] = ((frame_length >> 3) & 0xFF) as u8;
                                 header[5] = (((frame_length & 0x07) << 5) | 0x1F) as u8;
                                 header[6] = 0xFC;
@@ -476,8 +549,10 @@ fn parse_trun_sample_sizes(moof_data: &[u8]) -> Option<Vec<u32>> {
     let mut offset = 8; // skip moof header
     while offset + 8 <= moof_data.len() {
         let size = u32::from_be_bytes([
-            moof_data[offset], moof_data[offset + 1],
-            moof_data[offset + 2], moof_data[offset + 3]
+            moof_data[offset],
+            moof_data[offset + 1],
+            moof_data[offset + 2],
+            moof_data[offset + 3],
         ]) as usize;
         let btype = &moof_data[offset + 4..offset + 8];
 
@@ -491,8 +566,10 @@ fn parse_trun_sample_sizes(moof_data: &[u8]) -> Option<Vec<u32>> {
             let mut traf_offset = 8;
             while traf_offset + 8 <= traf_data.len() {
                 let trun_size = u32::from_be_bytes([
-                    traf_data[traf_offset], traf_data[traf_offset + 1],
-                    traf_data[traf_offset + 2], traf_data[traf_offset + 3]
+                    traf_data[traf_offset],
+                    traf_data[traf_offset + 1],
+                    traf_data[traf_offset + 2],
+                    traf_data[traf_offset + 3],
                 ]) as usize;
                 let trun_type = &traf_data[traf_offset + 4..traf_offset + 8];
 
@@ -521,13 +598,18 @@ fn parse_trun_box(trun_data: &[u8]) -> Option<Vec<u32>> {
 
     // trun box: 4 size, 4 type, 1 version, 3 flags, 4 sample_count, [optional fields], [samples]
     let flags = u32::from_be_bytes([0, trun_data[9], trun_data[10], trun_data[11]]);
-    let sample_count = u32::from_be_bytes([trun_data[12], trun_data[13], trun_data[14], trun_data[15]]) as usize;
+    let sample_count =
+        u32::from_be_bytes([trun_data[12], trun_data[13], trun_data[14], trun_data[15]]) as usize;
 
     let mut offset = 16;
 
     // Skip optional fields based on flags
-    if flags & 0x001 != 0 { offset += 4; } // data_offset
-    if flags & 0x004 != 0 { offset += 4; } // first_sample_flags
+    if flags & 0x001 != 0 {
+        offset += 4;
+    } // data_offset
+    if flags & 0x004 != 0 {
+        offset += 4;
+    } // first_sample_flags
 
     let has_duration = flags & 0x100 != 0;
     let has_size = flags & 0x200 != 0;
@@ -541,32 +623,40 @@ fn parse_trun_box(trun_data: &[u8]) -> Option<Vec<u32>> {
 
     let mut sizes = Vec::with_capacity(sample_count);
     for _ in 0..sample_count {
-        if has_duration { offset += 4; }
+        if has_duration {
+            offset += 4;
+        }
         if has_size {
-            if offset + 4 > trun_data.len() { break; }
+            if offset + 4 > trun_data.len() {
+                break;
+            }
             let size = u32::from_be_bytes([
-                trun_data[offset], trun_data[offset + 1],
-                trun_data[offset + 2], trun_data[offset + 3]
+                trun_data[offset],
+                trun_data[offset + 1],
+                trun_data[offset + 2],
+                trun_data[offset + 3],
             ]);
             sizes.push(size);
             offset += 4;
         }
-        if has_flags { offset += 4; }
-        if has_cts { offset += 4; }
+        if has_flags {
+            offset += 4;
+        }
+        if has_cts {
+            offset += 4;
+        }
     }
 
-    if sizes.is_empty() {
-        None
-    } else {
-        Some(sizes)
-    }
+    if sizes.is_empty() { None } else { Some(sizes) }
 }
 
 /// Extracts AAC ADTS frames from MPEG-TS container data.
 ///
 /// Parses TS packets to extract payloads, then scans for valid ADTS frames
 /// with sync word validation between consecutive frames.
-fn extract_aac_from_mpegts(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+fn extract_aac_from_mpegts(
+    data: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     const TS_PACKET_SIZE: usize = 188;
 
     let mut offset = 0;
@@ -668,10 +758,7 @@ fn extract_aac_from_mpegts(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::E
 }
 
 /// Downloads HLS stream by parsing the m3u8 playlist and fetching all segments
-pub fn download_hls_stream(
-    token_secret: String,
-    hls_url: &str,
-) -> HlsDownloadFuture<'_> {
+pub fn download_hls_stream(token_secret: String, hls_url: &str) -> HlsDownloadFuture<'_> {
     Box::pin(async move {
         let client = reqwest::Client::new();
 
@@ -732,45 +819,49 @@ pub fn download_hls_stream(
                 }
 
                 // Collect all segment URLs
-                let segment_urls: Vec<String> = media.segments.iter().map(|seg| {
-                    if seg.uri.starts_with("http") {
-                        seg.uri.clone()
-                    } else {
-                        format!("{}/{}", base_url, seg.uri)
-                    }
-                }).collect();
+                let segment_urls: Vec<String> = media
+                    .segments
+                    .iter()
+                    .map(|seg| {
+                        if seg.uri.starts_with("http") {
+                            seg.uri.clone()
+                        } else {
+                            format!("{}/{}", base_url, seg.uri)
+                        }
+                    })
+                    .collect();
 
                 // Download all segments concurrently (in batches to avoid overwhelming)
                 for chunk in segment_urls.chunks(10) {
-                    let futures: Vec<_> = chunk.iter().map(|url| {
-                        let client = client.clone();
-                        let url = url.clone();
-                        let token = token_secret.clone();
-                        async move {
-                            let response = client
-                                .get(&url)
-                                .bearer_auth(&token)
-                                .send()
-                                .await?;
-                            response.bytes().await
-                        }
-                    }).collect();
+                    let futures: Vec<_> = chunk
+                        .iter()
+                        .map(|url| {
+                            let client = client.clone();
+                            let url = url.clone();
+                            let token = token_secret.clone();
+                            async move {
+                                let response = client.get(&url).bearer_auth(&token).send().await?;
+                                response.bytes().await
+                            }
+                        })
+                        .collect();
 
                     let results = futures::future::join_all(futures).await;
                     for result in results {
                         match result {
                             Ok(bytes) => all_bytes.extend_from_slice(&bytes),
-                            Err(e) => return Err(format!("Failed to download segment: {}", e).into()),
+                            Err(e) => {
+                                return Err(format!("Failed to download segment: {}", e).into());
+                            }
                         }
                     }
                 }
 
                 // Detect format: fMP4 starts with box structure (ftyp/styp), MPEG-TS starts with 0x47
-                let is_fmp4 = all_bytes.len() >= 8 && (
-                    &all_bytes[4..8] == b"ftyp" ||
-                    &all_bytes[4..8] == b"styp" ||
-                    &all_bytes[4..8] == b"moov"
-                );
+                let is_fmp4 = all_bytes.len() >= 8
+                    && (&all_bytes[4..8] == b"ftyp"
+                        || &all_bytes[4..8] == b"styp"
+                        || &all_bytes[4..8] == b"moov");
 
                 if is_fmp4 {
                     // Extract AAC from fMP4 and convert to ADTS for seeking support

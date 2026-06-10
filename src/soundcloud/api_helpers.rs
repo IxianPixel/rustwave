@@ -1,4 +1,7 @@
-use crate::models::{SearchResults, SoundCloudActivityCollection, SoundCloudStreams, SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile};
+use crate::models::{
+    SearchResults, SoundCloudActivityCollection, SoundCloudStreams, SoundCloudTrack,
+    SoundCloudTracks, SoundCloudUserProfile,
+};
 use crate::soundcloud::api;
 use crate::soundcloud::auth::{AuthError, TokenManager};
 
@@ -151,7 +154,9 @@ pub async fn get_track_streams_with_refresh(
                     || error_msg.contains("Unauthorized")
                 {
                     Err((
-                        AuthError::OAuth("Authentication failed while fetching streams".to_string()),
+                        AuthError::OAuth(
+                            "Authentication failed while fetching streams".to_string(),
+                        ),
                         token_manager,
                     ))
                 } else {

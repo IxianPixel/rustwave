@@ -1,7 +1,7 @@
 use crate::Message;
-use iced::widget::canvas::{Frame, Geometry, Path, Program};
-use iced::widget::{canvas};
-use iced::{Color, Element, Length, Point, Rectangle, Renderer, Size, Theme};
+use iced::widget::canvas;
+use iced::widget::canvas::{Action, Frame, Geometry, Path, Program};
+use iced::{Color, Element, Event, Length, Point, Rectangle, Renderer, Size, Theme, mouse};
 
 struct WaveformCanvas {
     peaks: Vec<f32>,
@@ -62,21 +62,19 @@ impl Program<Message> for WaveformCanvas {
     fn update(
         &self,
         _state: &mut Self::State,
-        event: canvas::Event,
+        event: &Event,
         bounds: Rectangle,
         cursor: iced::mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Message>) {
-        use canvas::event::Status;
-
-        if let canvas::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) = event
+    ) -> Option<Action<Message>> {
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
             && let Some(position) = cursor.position_in(bounds)
         {
             // Calculate seek position as percentage
             let percent = (position.x / bounds.width * 100.0).clamp(0.0, 100.0);
-            return (Status::Captured, Some(Message::SeekToPosition(percent)));
+            return Some(Action::publish(Message::SeekToPosition(percent)).and_capture());
         }
 
-        (Status::Ignored, None)
+        None
     }
 
     fn mouse_interaction(

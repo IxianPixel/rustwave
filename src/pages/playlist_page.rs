@@ -18,6 +18,7 @@ use tracing::debug;
 #[derive(Debug, Clone)]
 pub enum PlaylistPageMessage {
     LoadPlaylist,
+    RequestImage(u64),
     PlayTrack(SoundCloudTrack),
     ImageLoaded(u64, Handle),
     ImageLoadFailed(u64),
@@ -53,12 +54,18 @@ impl Page for PlaylistPage {
         if let Message::PlaylistPage(msg) = message {
             match msg {
                 PlaylistPageMessage::LoadPlaylist => {
-                    let image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| Message::PlaylistPage(Mp::ImageLoaded(track_id, handle)),
-                        |track_id| Message::PlaylistPage(Mp::ImageLoadFailed(track_id)),
+                    // Artwork now loads lazily per row via RequestImage.
+                    return (None, Task::none());
+                }
+                PlaylistPageMessage::RequestImage(track_id) => {
+                    return (
+                        None,
+                        self.track_list.load_image_task(
+                            track_id,
+                            |id, handle| Message::PlaylistPage(Mp::ImageLoaded(id, handle)),
+                            |id| Message::PlaylistPage(Mp::ImageLoadFailed(id)),
+                        ),
                     );
-
-                    return (None, Task::batch(image_tasks));
                 }
                 PlaylistPageMessage::PlayTrack(track) => {
                     self.track_list.set_current_track_id(track.id);
@@ -142,6 +149,7 @@ impl Page for PlaylistPage {
             |t| Message::PlaylistPage(PlaylistPageMessage::PlayTrack(t)),
             |urn| Message::PlaylistPage(PlaylistPageMessage::LoadUser(urn)),
             |t| Message::PlaylistPage(PlaylistPageMessage::LikeTrack(t)),
+            |id| Message::PlaylistPage(PlaylistPageMessage::RequestImage(id)),
         );
 
         column![

@@ -6,7 +6,7 @@ use crate::soundcloud::api_helpers;
 use crate::widgets::{get_playlist_widget, get_user_widget};
 use crate::{Message, Page};
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, column, row, text_input};
+use iced::widget::{Scrollable, column, grid, row, text_input};
 use iced::{Length, Task};
 use std::collections::HashMap;
 use tracing::debug;
@@ -19,6 +19,7 @@ pub enum SearchPageMessage {
     ApiErrorWithToken(String, TokenManager),
     UserImageLoaded(String, Handle),
     UserImageLoadFailed(String),
+    RequestTrackImage(u64),
     TrackImageLoaded(u64, Handle),
     TrackImageLoadFailed(u64),
     PlayTrack(SoundCloudTrack),
@@ -111,18 +112,8 @@ impl Page for SearchPage {
                         })
                         .collect();
 
-                    // Create tasks to load images for all tracks
-                    let track_image_tasks = self.track_list.create_image_load_tasks(
-                        |track_id, handle| {
-                            Message::SearchPage(Ms::TrackImageLoaded(track_id, handle))
-                        },
-                        |track_id| Message::SearchPage(Ms::TrackImageLoadFailed(track_id)),
-                    );
-
-                    return (
-                        None,
-                        Task::batch(image_tasks.into_iter().chain(track_image_tasks)),
-                    );
+                    // Track artwork now loads lazily per row via RequestTrackImage.
+                    return (None, Task::batch(image_tasks));
                 }
                 SearchPageMessage::ApiErrorWithToken(error_msg, token_manager) => {
                     self.token_manager = token_manager;
@@ -137,6 +128,16 @@ impl Page for SearchPage {
                 SearchPageMessage::UserImageLoadFailed(user_urn) => {
                     debug!("Failed to load image for user {}", user_urn);
                     return (None, Task::none());
+                }
+                SearchPageMessage::RequestTrackImage(track_id) => {
+                    return (
+                        None,
+                        self.track_list.load_image_task(
+                            track_id,
+                            |id, handle| Message::SearchPage(Ms::TrackImageLoaded(id, handle)),
+                            |id| Message::SearchPage(Ms::TrackImageLoadFailed(id)),
+                        ),
+                    );
                 }
                 SearchPageMessage::TrackImageLoaded(track_id, handle) => {
                     self.track_list.handle_image_loaded(track_id, handle);
@@ -208,26 +209,36 @@ impl Page for SearchPage {
             count_b.cmp(&count_a)
         });
 
-        let users_column = indices.iter().fold(row![], |col, &idx| {
+        // Responsive grid of user cards: column count adapts to available width.
+        let user_cells = indices.iter().map(|&idx| {
             let user = &self.users[idx];
             let image_handle = self.user_images.get(&user.urn).cloned();
-            col.push(get_user_widget(user, image_handle, |urn| {
+            iced::Element::from(get_user_widget(user, image_handle, |urn| {
                 Message::SearchPage(SearchPageMessage::LoadUser(urn))
             }))
         });
+        let users_grid = grid(user_cells)
+            .fluid(300)
+            .spacing(10)
+            .height(Length::Shrink);
 
         let tracks_column = self.track_list.render_tracks(
             |t| Message::SearchPage(SearchPageMessage::PlayTrack(t)),
             |urn| Message::SearchPage(SearchPageMessage::LoadUser(urn)),
             |t| Message::SearchPage(SearchPageMessage::LikeTrack(t)),
+            |id| Message::SearchPage(SearchPageMessage::RequestTrackImage(id)),
         );
 
-        let playlists_column = self.playlists.iter().fold(column![], |col, playlist| {
+        let playlist_cells = self.playlists.iter().map(|playlist| {
             let image_handle = self.user_images.get(&playlist.user.urn).cloned();
-            col.push(get_playlist_widget(playlist, image_handle, |urn| {
+            iced::Element::from(get_playlist_widget(playlist, image_handle, |urn| {
                 Message::SearchPage(SearchPageMessage::LoadPlaylist(urn))
             }))
         });
+        let playlists_grid = grid(playlist_cells)
+            .fluid(300)
+            .spacing(10)
+            .height(Length::Shrink);
 
         column![
             row![
@@ -236,12 +247,12 @@ impl Page for SearchPage {
                     .on_input(|s| Message::SearchPage(Ms::SearchPressed(s))),
             ]
             .spacing(10),
-            row![users_column].spacing(10),
+            row![users_grid].spacing(10),
             row![
                 Scrollable::new(tracks_column)
                     .height(Length::FillPortion(1))
                     .width(Length::FillPortion(1)),
-                Scrollable::new(playlists_column)
+                Scrollable::new(playlists_grid)
                     .height(Length::FillPortion(1))
                     .width(Length::FillPortion(1)),
             ]

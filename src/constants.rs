@@ -50,12 +50,10 @@ lazy_static! {
         load_dotenv();
         env::var("CLIENT_ID").expect("CLIENT_ID must be set in .env file")
     };
-    
     pub static ref CLIENT_SECRET: String = {
         load_dotenv();
         env::var("CLIENT_SECRET").expect("CLIENT_SECRET must be set in .env file")
     };
-    
     pub static ref REDIRECT_URL: String = {
         load_dotenv();
         env::var("REDIRECT_URL").unwrap_or_else(|_| "http://localhost:32857/".to_string())

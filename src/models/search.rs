@@ -6,4 +6,3 @@ pub struct SearchResults {
     pub users: Vec<SoundCloudUser>,
     pub playlists: Vec<SoundCloudPlaylist>,
 }
-    
