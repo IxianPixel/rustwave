@@ -157,6 +157,23 @@ pub async fn load_user_profile_with_refresh(
     }
 }
 
+pub async fn get_playlist_tracks_with_refresh(
+    mut token_manager: TokenManager,
+    playlist_urn: String,
+    next_href: Option<String>,
+) -> Result<(SoundCloudTracks, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => match api::get_playlist_tracks(token, playlist_urn, next_href).await {
+            Ok(tracks) => Ok((tracks, token_manager)),
+            Err(e) => Err((
+                AuthError::Other(format!("Failed to load playlist tracks: {}", e)),
+                token_manager,
+            )),
+        },
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
 pub async fn get_user_tracks_with_refresh(
     mut token_manager: TokenManager,
     user_urn: String,
