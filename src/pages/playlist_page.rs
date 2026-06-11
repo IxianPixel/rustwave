@@ -12,7 +12,7 @@ use iced::Color;
 use iced::Length;
 use iced::Task;
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, row, text};
+use iced::widget::{Scrollable, text};
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -156,17 +156,18 @@ impl Page for PlaylistPage {
             |id| Message::PlaylistPage(PlaylistPageMessage::RequestImage(id)),
         );
 
-        column![
-            row![if self.track_load_failed {
-                text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0))
-            } else {
-                text("")
-            }],
-            Scrollable::new(tracks_column)
-                .style(crate::widgets::scrollbar_style)
-                .height(Length::FillPortion(1))
-                .width(Length::FillPortion(1)),
-        ]
-        .into()
+        let mut content = column![];
+        if self.track_load_failed {
+            content =
+                content.push(text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)));
+        }
+        content
+            .push(
+                Scrollable::new(tracks_column)
+                    .style(crate::widgets::scrollbar_style)
+                    .height(Length::FillPortion(1))
+                    .width(Length::FillPortion(1)),
+            )
+            .into()
     }
 }

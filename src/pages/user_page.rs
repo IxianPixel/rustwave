@@ -242,24 +242,25 @@ impl Page for UserPage {
             .spacing(10)
             .height(Length::Shrink);
 
-        column![
-            row![if self.track_load_failed {
-                text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0))
-            } else {
-                text("")
-            }],
-            row![
-                Scrollable::new(tracks_column)
-                    .style(crate::widgets::scrollbar_style)
-                    .height(Length::FillPortion(1))
-                    .width(Length::FillPortion(1)),
-                Scrollable::new(playlists_grid)
-                    .style(crate::widgets::scrollbar_style)
-                    .height(Length::FillPortion(1))
-                    .width(Length::FillPortion(1)),
-            ]
-            .spacing(10)
-        ]
-        .into()
+        let mut content = column![];
+        if self.track_load_failed {
+            content =
+                content.push(text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)));
+        }
+        content
+            .push(
+                row![
+                    Scrollable::new(tracks_column)
+                        .style(crate::widgets::scrollbar_style)
+                        .height(Length::FillPortion(1))
+                        .width(Length::FillPortion(1)),
+                    Scrollable::new(playlists_grid)
+                        .style(crate::widgets::scrollbar_style)
+                        .height(Length::FillPortion(1))
+                        .width(Length::FillPortion(1)),
+                ]
+                .spacing(10),
+            )
+            .into()
     }
 }

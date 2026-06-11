@@ -14,7 +14,7 @@ use iced::Task;
 use iced::Vector;
 use iced::advanced::widget::{Id, operate, operation};
 use iced::widget::scrollable::AbsoluteOffset;
-use iced::widget::{Scrollable, button, float, row, sensor, stack, text};
+use iced::widget::{Scrollable, button, float, sensor, stack, text};
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -257,18 +257,18 @@ impl Page for FeedPage {
             tracks_column = tracks_column.push(text("Loading tracks..."));
         }
 
-        let content = column![
-            row![if self.track_load_failed {
-                text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0))
-            } else {
-                text("")
-            }],
+        let mut content = column![];
+        if self.track_load_failed {
+            content =
+                content.push(text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)));
+        }
+        content = content.push(
             Scrollable::new(tracks_column)
                 .id(SCROLL_ID)
                 .style(crate::widgets::scrollbar_style)
                 .height(Length::FillPortion(1))
                 .width(Length::FillPortion(1)),
-        ];
+        );
 
         if self.track_list.tracks().is_empty() {
             return content.into();
