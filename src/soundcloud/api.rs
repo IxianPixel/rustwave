@@ -89,19 +89,25 @@ pub async fn get_activity_feed_paginated(
 pub async fn search_tracks(
     access_token: AccessToken,
     query: &str,
-) -> Result<Vec<SoundCloudTrack>, Box<dyn std::error::Error + Send + Sync>> {
+    next_href: Option<String>,
+) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
-    let response = c
-        .get("https://api.soundcloud.com/tracks")
-        .query(&[
+
+    let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/tracks".to_string());
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
             ("q", query),
             ("access", "playable,blocked"),
-            ("limit", "20"),
+            ("limit", "50"),
             ("linked_partitioning", "true"),
-        ])
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
+        ]);
+    }
+
+    let response = request.send().await?;
 
     let status = response.status();
     if !status.is_success() {
@@ -113,29 +119,43 @@ pub async fn search_tracks(
     }
 
     let body = response.json::<SoundCloudTracks>().await?;
-    Ok(body.collection)
+    Ok(body)
 }
 
 pub async fn search_playlists(
     access_token: AccessToken,
     query: &str,
-) -> Result<Vec<SoundCloudPlaylist>, Box<dyn std::error::Error + Send + Sync>> {
+    next_href: Option<String>,
+) -> Result<SoundCloudPlaylists, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
-    let r = c
-        .get("https://api.soundcloud.com/playlists")
-        .query(&[
+
+    let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/playlists".to_string());
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
             ("q", query),
             ("access", "playable,blocked"),
-            ("limit", "20"),
+            ("limit", "50"),
             ("linked_partitioning", "true"),
-        ])
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
+        ]);
+    }
 
-    let body = r.json::<SoundCloudPlaylists>().await?;
+    let response = request.send().await?;
 
-    Ok(body.collection)
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudPlaylists>().await?;
+    Ok(body)
 }
 
 pub async fn search_user(
@@ -173,14 +193,16 @@ pub async fn search(
     query: &str,
 ) -> Result<SearchResults, Box<dyn std::error::Error + Send + Sync>> {
     let (tracks, users, playlists) = try_join!(
-        search_tracks(access_token.clone(), query),
+        search_tracks(access_token.clone(), query, None),
         search_user(access_token.clone(), query),
-        search_playlists(access_token.clone(), query)
+        search_playlists(access_token.clone(), query, None)
     )?;
     Ok(SearchResults {
-        tracks,
+        tracks: tracks.collection,
+        tracks_next_href: tracks.next_href,
         users,
-        playlists,
+        playlists: playlists.collection,
+        playlists_next_href: playlists.next_href,
     })
 }
 

@@ -1,6 +1,6 @@
 use crate::models::{
-    SearchResults, SoundCloudActivityCollection, SoundCloudStreams, SoundCloudTrack,
-    SoundCloudTracks, SoundCloudUserProfile,
+    SearchResults, SoundCloudActivityCollection, SoundCloudPlaylists, SoundCloudStreams,
+    SoundCloudTrack, SoundCloudTracks, SoundCloudUserProfile,
 };
 use crate::soundcloud::api;
 use crate::soundcloud::auth::{AuthError, TokenManager};
@@ -82,6 +82,40 @@ pub async fn search_with_refresh(
                     ))
                 }
             }
+        },
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
+pub async fn search_tracks_with_refresh(
+    mut token_manager: TokenManager,
+    query: String,
+    next_href: Option<String>,
+) -> Result<(SoundCloudTracks, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => match api::search_tracks(token, &query, next_href).await {
+            Ok(tracks) => Ok((tracks, token_manager)),
+            Err(e) => Err((
+                AuthError::Other(format!("Failed to load more tracks: {}", e)),
+                token_manager,
+            )),
+        },
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
+pub async fn search_playlists_with_refresh(
+    mut token_manager: TokenManager,
+    query: String,
+    next_href: Option<String>,
+) -> Result<(SoundCloudPlaylists, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => match api::search_playlists(token, &query, next_href).await {
+            Ok(playlists) => Ok((playlists, token_manager)),
+            Err(e) => Err((
+                AuthError::Other(format!("Failed to load more playlists: {}", e)),
+                token_manager,
+            )),
         },
         Err(e) => Err((e, token_manager)),
     }
