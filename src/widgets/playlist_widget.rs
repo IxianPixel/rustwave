@@ -40,7 +40,7 @@ where
     row = row.push(
         container(column![
             text(truncate_title(&playlist.title))
-                .shaping(text::Shaping::Advanced)
+                .shaping(text::Shaping::Auto)
                 .size(20),
             text(format!(
                 "{} tracks",

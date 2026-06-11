@@ -14,6 +14,7 @@ use std::time::Duration;
 #[allow(clippy::too_many_arguments)]
 pub fn get_playback_bar<'a>(
     artwork: Option<Handle>,
+    artwork_opacity: f32,
     title: &'a str,
     user: &'a str,
     track_position: Duration,
@@ -30,7 +31,9 @@ pub fn get_playback_bar<'a>(
         image(handle).width(100).height(100)
     } else {
         image("placeholder.png").width(100).height(100)
-    };
+    }
+    .opacity(artwork_opacity)
+    .scale(0.85 + 0.15 * artwork_opacity);
 
     let queue_text = if let Some(current_pos) = current_position {
         text(format!("Queue: {} of {}", current_pos + 1, queue_length))
@@ -46,9 +49,9 @@ pub fn get_playback_bar<'a>(
                 if stream_loading {
                     text("Loading stream...")
                 } else {
-                    text(format!("Now Playing: {}", title)).shaping(text::Shaping::Advanced)
+                    text(format!("Now Playing: {}", title)).shaping(text::Shaping::Auto)
                 },
-                text(format!("User: {}", user)).shaping(text::Shaping::Advanced),
+                text(format!("User: {}", user)).shaping(text::Shaping::Auto),
                 text(format!(
                     "{} / {}",
                     track_position.format_as_mmss(),

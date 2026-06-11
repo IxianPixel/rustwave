@@ -1,7 +1,8 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::managers::{AudioManager, QueueManager};
 use crate::pages::AuthPage;
+use iced::animation::Animation;
 use iced::widget::image::Handle;
 use iced::{
     Event, Length, Subscription, Task,
@@ -87,6 +88,7 @@ struct MyApp {
     title: String,
     user: String,
     artwork: Option<Handle>,
+    artwork_anim: Animation<bool>, // Drives the fade/pop-in when artwork changes
     waveform_peaks: Option<Vec<f32>>, // Peak data for canvas rendering
     audio_manager: AudioManager,
     queue_manager: QueueManager,
@@ -137,6 +139,7 @@ impl MyApp {
                 title: "Nothing".to_string(),
                 user: "Nothing".to_string(),
                 artwork: None,
+                artwork_anim: Animation::new(true),
                 waveform_peaks: None,
                 audio_manager: AudioManager::new(),
                 queue_manager: QueueManager::new(),
@@ -190,6 +193,10 @@ impl MyApp {
 
                 self.pending_stream_download = false;
                 self.artwork = image_handle;
+
+                // Fade and pop the new artwork in.
+                self.artwork_anim = Animation::new(false).duration(Duration::from_millis(350));
+                self.artwork_anim.go_mut(true, Instant::now());
 
                 // Update media controls metadata
                 self.audio_manager.update_metadata(
@@ -383,16 +390,24 @@ impl MyApp {
             _ => None,
         });
 
-        Subscription::batch(vec![
+        let mut subscriptions = vec![
             keyboard_listerer,
             time::every(Duration::from_millis(100)).map(|_| Message::UiTick), // More frequent for media control responsiveness
-        ])
+        ];
+
+        // While artwork is animating, redraw every frame for a smooth fade.
+        if self.artwork_anim.is_animating(Instant::now()) {
+            subscriptions.push(window::frames().map(|_| Message::UiTick));
+        }
+
+        Subscription::batch(subscriptions)
     }
 
     fn view(&self) -> iced::Element<'_, Message> {
         column![
             widgets::get_playback_bar(
                 self.artwork.clone(),
+                self.artwork_anim.interpolate(0.0, 1.0, Instant::now()),
                 &self.title,
                 &self.user,
                 self.audio_manager.track_position,

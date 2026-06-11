@@ -4,14 +4,17 @@ use crate::pages::{FeedPage, SearchPage, UserPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
 use crate::{Message, Page};
+use iced::advanced::widget::{Id, operate, operation};
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, column, row, sensor, text};
-use iced::{Color, Length, Task};
+use iced::widget::scrollable::AbsoluteOffset;
+use iced::widget::{Scrollable, button, column, float, row, sensor, stack, text};
+use iced::{Color, Length, Task, Vector};
 
 #[derive(Debug, Clone)]
 pub enum LikesPageMessage {
     LoadFavourites,
     LoadMoreFavourites,
+    ScrollToTop,
     RequestImage(u64),
     PlayTrack(SoundCloudTrack),
     ImageLoaded(u64, Handle),
@@ -26,6 +29,8 @@ type Ml = LikesPageMessage;
 
 // Start loading the next page when the bottom sentinel is within 500px of the viewport
 const LOAD_MORE_THRESHOLD: f32 = 500.0;
+// Stable id linking the track Scrollable to its scroll-to-top button.
+const SCROLL_ID: &str = "likes_scroll";
 
 pub struct LikesPage {
     token_manager: TokenManager,
@@ -100,6 +105,18 @@ impl Page for LikesPage {
                                 ),
                             },
                         ),
+                    );
+                }
+                LikesPageMessage::ScrollToTop => {
+                    return (
+                        None,
+                        operate(operation::scrollable::scroll_to(
+                            Id::new(SCROLL_ID),
+                            AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(0.0),
+                            },
+                        )),
                     );
                 }
                 LikesPageMessage::PlayTrack(track) => {
@@ -228,16 +245,45 @@ impl Page for LikesPage {
             tracks_column = tracks_column.push(text("Loading tracks..."));
         }
 
-        column![
+        let content = column![
             row![if self.track_load_failed {
                 text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0))
             } else {
                 text("")
             }],
             Scrollable::new(tracks_column)
+                .id(SCROLL_ID)
                 .height(Length::FillPortion(1))
                 .width(Length::FillPortion(1)),
-        ]
-        .into()
+        ];
+
+        if self.track_list.tracks().is_empty() {
+            return content.into();
+        }
+
+        // Floating "scroll to top" button, anchored to the bottom-right of the list.
+        let fab = float(
+            button(
+                text("↑")
+                    .size(22)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .align_x(iced::alignment::Horizontal::Center)
+                    .align_y(iced::alignment::Vertical::Center),
+            )
+            .width(44)
+            .height(44)
+            .padding(0)
+            .on_press(Message::LikesPage(Ml::ScrollToTop)),
+        )
+        .translate(|bounds, viewport| {
+            let margin = 24.0;
+            Vector::new(
+                (viewport.x + viewport.width - margin - bounds.width) - bounds.x,
+                (viewport.y + viewport.height - margin - bounds.height) - bounds.y,
+            )
+        });
+
+        stack![content, fab].into()
     }
 }

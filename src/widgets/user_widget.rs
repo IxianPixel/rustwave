@@ -27,7 +27,7 @@ where
 
     row = row.push(column![
         text(truncate_string(user.username.clone(), 20))
-            .shaping(text::Shaping::Advanced)
+            .shaping(text::Shaping::Auto)
             .size(20),
         text(format!(
             "{} followers",

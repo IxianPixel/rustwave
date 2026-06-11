@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 directories = "6.0.0"
 dotenv = "0.15.0"
-iced = { version = "0.14", features = ["tokio", "image", "svg", "canvas"] }
+iced = { version = "0.14", features = ["tokio", "image", "svg", "canvas", "advanced"] }
 image = "0.25"
 lazy_static = "1.5.0"
 oauth2 = { version = "5.0", features = ["reqwest-blocking"] }

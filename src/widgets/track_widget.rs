@@ -33,10 +33,10 @@ where
     let duration = Duration::from_millis(track.duration);
 
     let title_text = if track.stream_url.is_some() {
-        text(track.title.clone()).shaping(text::Shaping::Advanced)
+        text(track.title.clone()).shaping(text::Shaping::Auto)
     } else {
         text(format!("{} (Unavailable)", track.title.clone()))
-            .shaping(text::Shaping::Advanced)
+            .shaping(text::Shaping::Auto)
             .color(Color::from_rgb(1.0, 0.0, 0.0))
     };
 
@@ -50,7 +50,7 @@ where
     row = row.push(column![
         mouse_area(
             text(track.user.username.clone())
-                .shaping(text::Shaping::Advanced)
+                .shaping(text::Shaping::Auto)
                 .size(20)
         )
         .on_press(on_user(track.user.urn.clone())),
