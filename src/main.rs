@@ -81,6 +81,10 @@ enum Message {
 trait Page {
     fn update(&mut self, message: Message) -> (Option<Box<dyn Page>>, Task<Message>);
     fn view(&self) -> iced::Element<'_, Message>;
+    /// Whether the page has an active animation that needs frame-by-frame redraws.
+    fn is_animating(&self) -> bool {
+        false
+    }
 }
 
 struct MyApp {
@@ -395,8 +399,9 @@ impl MyApp {
             time::every(Duration::from_millis(100)).map(|_| Message::UiTick), // More frequent for media control responsiveness
         ];
 
-        // While artwork is animating, redraw every frame for a smooth fade.
-        if self.artwork_anim.is_animating(Instant::now()) {
+        // While the now-playing artwork or any list artwork is animating, redraw
+        // every frame for a smooth fade.
+        if self.artwork_anim.is_animating(Instant::now()) || self.page.is_animating() {
             subscriptions.push(window::frames().map(|_| Message::UiTick));
         }
 

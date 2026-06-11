@@ -3,18 +3,23 @@ use crate::models::SoundCloudTrack;
 use crate::widgets::get_track_widget;
 use iced::Element;
 use iced::Task;
+use iced::animation::Animation;
 use iced::widget::image::Handle;
 use iced::widget::{Column, column, sensor};
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 // Start fetching a track's artwork when its row is within this many pixels of the viewport.
 const IMAGE_PREFETCH_DISTANCE: f32 = 300.0;
+// How long a track's artwork takes to fade in once it has loaded.
+const IMAGE_FADE: Duration = Duration::from_millis(400);
 
 /// Manages common track list functionality shared across multiple pages
 pub struct TrackListManager {
     tracks: Vec<SoundCloudTrack>,
     track_images: HashMap<u64, Handle>,
     requested: HashSet<u64>,
+    image_fades: HashMap<u64, Animation<bool>>,
     current_track_id: u64,
 }
 
@@ -24,6 +29,7 @@ impl TrackListManager {
             tracks: Vec::new(),
             track_images: HashMap::new(),
             requested: HashSet::new(),
+            image_fades: HashMap::new(),
             current_track_id: 0,
         }
     }
@@ -33,6 +39,7 @@ impl TrackListManager {
             tracks,
             track_images: HashMap::new(),
             requested: HashSet::new(),
+            image_fades: HashMap::new(),
             current_track_id: 0,
         }
     }
@@ -45,6 +52,7 @@ impl TrackListManager {
         self.tracks = tracks;
         self.track_images.clear();
         self.requested.clear();
+        self.image_fades.clear();
     }
 
     pub fn append_tracks(&mut self, mut tracks: Vec<SoundCloudTrack>) {
@@ -60,9 +68,18 @@ impl TrackListManager {
         self.current_track_id = track_id;
     }
 
-    /// Handle a track image being loaded
+    /// Handle a track image being loaded, kicking off its fade-in.
     pub fn handle_image_loaded(&mut self, track_id: u64, handle: Handle) {
         self.track_images.insert(track_id, handle);
+        let mut fade = Animation::new(false).duration(IMAGE_FADE);
+        fade.go_mut(true, Instant::now());
+        self.image_fades.insert(track_id, fade);
+    }
+
+    /// Whether any track artwork is still fading in (drives frame-by-frame redraws).
+    pub fn is_animating(&self) -> bool {
+        let now = Instant::now();
+        self.image_fades.values().any(|fade| fade.is_animating(now))
     }
 
     /// Lazily download a single track's artwork on demand (driven by the row's
@@ -117,12 +134,19 @@ impl TrackListManager {
         F3: Fn(SoundCloudTrack) -> Message + Clone + 'static,
         F4: Fn(u64) -> Message + Clone + 'static,
     {
+        let now = Instant::now();
         self.tracks.iter().fold(column![], |col, track| {
             let track_id = track.id;
             let image_handle = self.track_images.get(&track_id).cloned();
+            let image_opacity = self
+                .image_fades
+                .get(&track_id)
+                .map(|fade| fade.interpolate(0.0, 1.0, now))
+                .unwrap_or(1.0);
             let widget = get_track_widget(
                 track,
                 image_handle,
+                image_opacity,
                 on_play.clone(),
                 on_user_click.clone(),
                 on_like.clone(),

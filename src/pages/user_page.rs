@@ -63,6 +63,10 @@ impl UserPage {
 }
 
 impl Page for UserPage {
+    fn is_animating(&self) -> bool {
+        self.track_list.is_animating()
+    }
+
     fn update(&mut self, message: Message) -> (Option<Box<dyn Page>>, Task<Message>) {
         if let Message::UserPage(msg) = message {
             match msg {

@@ -1,14 +1,15 @@
 use crate::Message;
 use crate::models::SoundCloudTrack;
 use crate::utilities::{DurationFormat, NumberFormat, get_asset_path};
-use iced::widget::{MouseArea, Row, Space, Svg, button, mouse_area, svg, text};
+use iced::widget::{MouseArea, Row, Space, Svg, button, mouse_area, stack, svg, text};
 use iced::widget::{column, container, image, image::Handle, row};
-use iced::{Alignment, Color, Length};
+use iced::{Alignment, Color, Element, Length};
 use std::time::Duration;
 
 pub fn get_track_widget<F, U, L>(
     track: &'_ SoundCloudTrack,
     image_handle: Option<Handle>,
+    image_opacity: f32,
     on_play: F,
     on_user: U,
     on_like: L,
@@ -21,7 +22,15 @@ where
     let mut row = Row::new();
 
     if let Some(handle) = image_handle {
-        row = row.push(image(handle).width(100).height(100));
+        // Cross-fade the real artwork in over the placeholder.
+        let artwork: Element<'_, Message> = stack![
+            image(get_asset_path("assets/icon.png"))
+                .width(100)
+                .height(100),
+            image(handle).width(100).height(100).opacity(image_opacity),
+        ]
+        .into();
+        row = row.push(artwork);
     } else {
         row = row.push(
             image(get_asset_path("assets/icon.png"))
