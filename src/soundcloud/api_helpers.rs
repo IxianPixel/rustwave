@@ -157,6 +157,40 @@ pub async fn load_user_profile_with_refresh(
     }
 }
 
+pub async fn get_user_tracks_with_refresh(
+    mut token_manager: TokenManager,
+    user_urn: String,
+    next_href: Option<String>,
+) -> Result<(SoundCloudTracks, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => match api::get_user_tracks(token, user_urn, next_href).await {
+            Ok(tracks) => Ok((tracks, token_manager)),
+            Err(e) => Err((
+                AuthError::Other(format!("Failed to load more user tracks: {}", e)),
+                token_manager,
+            )),
+        },
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
+pub async fn get_user_playlists_with_refresh(
+    mut token_manager: TokenManager,
+    user_urn: String,
+    next_href: Option<String>,
+) -> Result<(SoundCloudPlaylists, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => match api::get_user_playlists(token, user_urn, next_href).await {
+            Ok(playlists) => Ok((playlists, token_manager)),
+            Err(e) => Err((
+                AuthError::Other(format!("Failed to load more user playlists: {}", e)),
+                token_manager,
+            )),
+        },
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
 pub async fn like_track_with_refresh(
     mut token_manager: TokenManager,
     track: SoundCloudTrack,

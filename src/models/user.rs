@@ -25,5 +25,7 @@ pub struct SoundCloudUser {
 pub struct SoundCloudUserProfile {
     pub user: SoundCloudUser,
     pub tracks: Vec<SoundCloudTrack>,
+    pub tracks_next_href: Option<String>,
     pub playlists: Vec<SoundCloudPlaylist>,
+    pub playlists_next_href: Option<String>,
 }

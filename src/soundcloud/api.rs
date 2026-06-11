@@ -3,9 +3,8 @@ use tokio::try_join;
 use tokio_util::bytes::Bytes;
 
 use crate::models::{
-    SearchResults, SoundCloudActivityCollection, SoundCloudPlaylist, SoundCloudPlaylists,
-    SoundCloudStreams, SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile,
-    SoundCloudUsers,
+    SearchResults, SoundCloudActivityCollection, SoundCloudPlaylists, SoundCloudStreams,
+    SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile, SoundCloudUsers,
 };
 
 /// Type alias for async HLS download result
@@ -244,21 +243,25 @@ pub async fn get_user(
 pub async fn get_user_tracks(
     access_token: AccessToken,
     user_urn: String,
-) -> Result<Vec<SoundCloudTrack>, Box<dyn std::error::Error + Send + Sync>> {
+    next_href: Option<String>,
+) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
-    let response = c
-        .get(format!(
-            "https://api.soundcloud.com/users/{}/tracks",
-            user_urn
-        ))
-        .query(&[
+
+    let url = next_href
+        .unwrap_or_else(|| format!("https://api.soundcloud.com/users/{}/tracks", user_urn));
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
             ("access", "playable,blocked"),
             ("limit", "50"),
             ("linked_partitioning", "true"),
-        ])
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
+        ]);
+    }
+
+    let response = request.send().await?;
 
     let status = response.status();
     if !status.is_success() {
@@ -270,27 +273,31 @@ pub async fn get_user_tracks(
     }
 
     let body = response.json::<SoundCloudTracks>().await?;
-    Ok(body.collection)
+    Ok(body)
 }
 
 pub async fn get_user_playlists(
     access_token: AccessToken,
     user_urn: String,
-) -> Result<Vec<SoundCloudPlaylist>, Box<dyn std::error::Error + Send + Sync>> {
+    next_href: Option<String>,
+) -> Result<SoundCloudPlaylists, Box<dyn std::error::Error + Send + Sync>> {
     let c = reqwest::Client::new();
-    let response = c
-        .get(format!(
-            "https://api.soundcloud.com/users/{}/playlists",
-            user_urn
-        ))
-        .query(&[
+
+    let url = next_href
+        .unwrap_or_else(|| format!("https://api.soundcloud.com/users/{}/playlists", user_urn));
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
             ("access", "playable,blocked"),
             ("limit", "50"),
             ("linked_partitioning", "true"),
-        ])
-        .bearer_auth(access_token.secret())
-        .send()
-        .await?;
+        ]);
+    }
+
+    let response = request.send().await?;
 
     let status = response.status();
     if !status.is_success() {
@@ -302,7 +309,7 @@ pub async fn get_user_playlists(
     }
 
     let body = response.json::<SoundCloudPlaylists>().await?;
-    Ok(body.collection)
+    Ok(body)
 }
 
 pub async fn get_user_profile(
@@ -311,13 +318,15 @@ pub async fn get_user_profile(
 ) -> Result<SoundCloudUserProfile, Box<dyn std::error::Error + Send + Sync>> {
     let (user, tracks, playlists) = try_join!(
         get_user(access_token.clone(), user_urn.clone()),
-        get_user_tracks(access_token.clone(), user_urn.clone()),
-        get_user_playlists(access_token.clone(), user_urn.clone()),
+        get_user_tracks(access_token.clone(), user_urn.clone(), None),
+        get_user_playlists(access_token.clone(), user_urn.clone(), None),
     )?;
     Ok(SoundCloudUserProfile {
         user,
-        tracks,
-        playlists,
+        tracks: tracks.collection,
+        tracks_next_href: tracks.next_href,
+        playlists: playlists.collection,
+        playlists_next_href: playlists.next_href,
     })
 }
 
