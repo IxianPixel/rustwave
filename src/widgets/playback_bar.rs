@@ -4,11 +4,21 @@ use crate::utilities::{DurationFormat, get_asset_path};
 use crate::widgets;
 use iced::widget::image::Handle;
 use iced::{
-    Color, Length,
+    Color, Element, Length,
     alignment::Vertical,
-    widget::{Space, Svg, button, column, container, image, row, rule, slider, svg, text},
+    widget::{Space, Svg, button, column, container, image, row, rule, slider, svg, text, tooltip},
 };
 use std::time::Duration;
+
+/// Wraps a control in a labelled tooltip shown after a short hover delay.
+fn tip<'a>(content: impl Into<Element<'a, Message>>, label: &'a str) -> Element<'a, Message> {
+    tooltip(content, text(label), tooltip::Position::Top)
+        .gap(6)
+        .padding(8)
+        .delay(Duration::from_millis(350))
+        .style(container::rounded_box)
+        .into()
+}
 
 /// Renders the playback control bar with album art, track info, and controls
 #[allow(clippy::too_many_arguments)]
@@ -63,80 +73,104 @@ pub fn get_playback_bar<'a>(
             container(
                 column![
                     row![
-                        button(
-                            Svg::new(get_asset_path("assets/previous.svg"))
+                        tip(
+                            button(
+                                Svg::new(get_asset_path("assets/previous.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                    }),
+                            )
+                            .on_press(Message::PreviousTrack),
+                            "Previous track",
+                        ),
+                        tip(
+                            button(
+                                Svg::new(get_asset_path(if is_playing {
+                                    "assets/pause.svg"
+                                } else {
+                                    "assets/play.svg"
+                                }))
                                 .width(22)
                                 .height(22)
                                 .style(|_theme, _status| svg::Style {
                                     color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
                                 }),
-                        )
-                        .on_press(Message::PreviousTrack),
-                        button(
-                            Svg::new(get_asset_path(if is_playing {
-                                "assets/pause.svg"
-                            } else {
-                                "assets/play.svg"
-                            }))
-                            .width(22)
-                            .height(22)
-                            .style(|_theme, _status| svg::Style {
-                                color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                            }),
-                        )
-                        .on_press(Message::PlayPausePlayback),
-                        button(
-                            Svg::new(get_asset_path("assets/next.svg"))
+                            )
+                            .on_press(Message::PlayPausePlayback),
+                            if is_playing { "Pause" } else { "Play" },
+                        ),
+                        tip(
+                            button(
+                                Svg::new(get_asset_path("assets/next.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                    }),
+                            )
+                            .on_press(Message::NextTrack),
+                            "Next track",
+                        ),
+                        tip(
+                            button(
+                                Svg::new(get_asset_path(match settings.repeat_mode {
+                                    config::RepeatMode::All => "assets/repeat.svg",
+                                    config::RepeatMode::One => "assets/repeat_one.svg",
+                                }))
                                 .width(22)
                                 .height(22)
                                 .style(|_theme, _status| svg::Style {
                                     color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
                                 }),
-                        )
-                        .on_press(Message::NextTrack),
-                        button(
-                            Svg::new(get_asset_path(match settings.repeat_mode {
-                                config::RepeatMode::All => "assets/repeat.svg",
-                                config::RepeatMode::One => "assets/repeat_one.svg",
-                            }))
-                            .width(22)
-                            .height(22)
-                            .style(|_theme, _status| svg::Style {
-                                color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                            }),
-                        )
-                        .on_press(Message::ToggleRepeatMode),
+                            )
+                            .on_press(Message::ToggleRepeatMode),
+                            match settings.repeat_mode {
+                                config::RepeatMode::All => "Repeat: all",
+                                config::RepeatMode::One => "Repeat: one",
+                            },
+                        ),
                     ]
                     .spacing(5),
                     queue_text,
                     row![
-                        button(
-                            Svg::new(get_asset_path("assets/feed.svg"))
-                                .width(22)
-                                .height(22)
-                                .style(|_theme, _status| svg::Style {
-                                    color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                }),
-                        )
-                        .on_press(Message::NavigateToFeed),
-                        button(
-                            Svg::new(get_asset_path("assets/heart.svg"))
-                                .width(22)
-                                .height(22)
-                                .style(|_theme, _status| svg::Style {
-                                    color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                }),
-                        )
-                        .on_press(Message::NavigateToLikes),
-                        button(
-                            Svg::new(get_asset_path("assets/search.svg"))
-                                .width(22)
-                                .height(22)
-                                .style(|_theme, _status| svg::Style {
-                                    color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
-                                }),
-                        )
-                        .on_press(Message::NavigateToSearch),
+                        tip(
+                            button(
+                                Svg::new(get_asset_path("assets/feed.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                    }),
+                            )
+                            .on_press(Message::NavigateToFeed),
+                            "Feed",
+                        ),
+                        tip(
+                            button(
+                                Svg::new(get_asset_path("assets/heart.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                    }),
+                            )
+                            .on_press(Message::NavigateToLikes),
+                            "Likes",
+                        ),
+                        tip(
+                            button(
+                                Svg::new(get_asset_path("assets/search.svg"))
+                                    .width(22)
+                                    .height(22)
+                                    .style(|_theme, _status| svg::Style {
+                                        color: Some(Color::from_rgb(1.0, 1.0, 1.0)),
+                                    }),
+                            )
+                            .on_press(Message::NavigateToSearch),
+                            "Search",
+                        ),
                     ]
                     .spacing(5),
                 ]

@@ -265,6 +265,7 @@ impl Page for FeedPage {
             }],
             Scrollable::new(tracks_column)
                 .id(SCROLL_ID)
+                .style(crate::widgets::scrollbar_style)
                 .height(Length::FillPortion(1))
                 .width(Length::FillPortion(1)),
         ];

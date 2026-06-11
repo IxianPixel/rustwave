@@ -163,6 +163,7 @@ impl Page for PlaylistPage {
                 text("")
             }],
             Scrollable::new(tracks_column)
+                .style(crate::widgets::scrollbar_style)
                 .height(Length::FillPortion(1))
                 .width(Length::FillPortion(1)),
         ]

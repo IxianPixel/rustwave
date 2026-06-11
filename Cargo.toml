@@ -3,6 +3,13 @@ name = "rustwave"
 version = "0.3.0"
 edition = "2024"
 
+[features]
+# Opt-in iced hot reloading. Run with: `cargo hot run --features hot`
+# (requires the runner: `cargo install cargo-hot`). Only changes to this crate
+# reload; editing State/Message types still needs a cold restart. Leave off for
+# normal/release builds so the devtools deps aren't pulled in.
+hot = ["iced/hot"]
+
 [dependencies]
 directories = "6.0.0"
 dotenv = "0.15.0"

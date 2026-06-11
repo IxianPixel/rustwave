@@ -250,9 +250,11 @@ impl Page for UserPage {
             }],
             row![
                 Scrollable::new(tracks_column)
+                    .style(crate::widgets::scrollbar_style)
                     .height(Length::FillPortion(1))
                     .width(Length::FillPortion(1)),
                 Scrollable::new(playlists_grid)
+                    .style(crate::widgets::scrollbar_style)
                     .height(Length::FillPortion(1))
                     .width(Length::FillPortion(1)),
             ]
