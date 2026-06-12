@@ -8,16 +8,30 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
 use tracing::{info, warn};
-
 use url::Url;
-
-use std::io::{BufRead, BufReader, Write};
-use std::net::TcpListener;
 
 use crate::config;
 use crate::constants;
+
+/// Refresh the access token this many seconds before it actually expires, so
+/// requests already in flight never race the expiry.
+const EXPIRY_MARGIN_SECS: u64 = 60;
+/// How long to wait for the user to approve access in their browser before
+/// giving up on the login attempt.
+const BROWSER_AUTH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+type TokenResp = StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>;
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredToken {
@@ -25,60 +39,23 @@ struct StoredToken {
     refresh_token: Option<String>,
     expires_at: Option<u64>,
     token_type: String,
-    #[serde(default = "default_created_at")]
+    #[serde(default = "unix_now")]
     created_at: u64, // When the refresh token was first created
 }
 
-fn default_created_at() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
-
 impl StoredToken {
-    fn from_token_response(
-        token: StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>,
-    ) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        let expires_at = token.expires_in().map(|duration| now + duration.as_secs());
-
+    fn from_token_response(token: &TokenResp) -> Self {
         Self {
             access_token: token.access_token().secret().to_string(),
             refresh_token: token.refresh_token().map(|rt| rt.secret().to_string()),
-            expires_at,
+            expires_at: token.expires_in().map(|d| unix_now() + d.as_secs()),
             token_type: "Bearer".to_string(), // SoundCloud uses Bearer tokens
-            created_at: now,
+            created_at: unix_now(),
         }
-    }
-
-    fn is_expired(&self) -> bool {
-        if let Some(expires_at) = self.expires_at {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            now >= expires_at
-        } else {
-            false
-        }
-    }
-
-    fn to_access_token(&self) -> AccessToken {
-        AccessToken::new(self.access_token.clone())
-    }
-
-    fn to_refresh_token(&self) -> Option<RefreshToken> {
-        self.refresh_token
-            .as_ref()
-            .map(|rt| RefreshToken::new(rt.clone()))
     }
 }
 
+#[derive(Clone)]
 struct TokenStorage {
     file_path: PathBuf,
 }
@@ -91,12 +68,8 @@ impl TokenStorage {
         Ok(Self { file_path })
     }
 
-    fn save_token(
-        &self,
-        token: StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>,
-    ) -> Result<(), AuthError> {
-        let stored_token = StoredToken::from_token_response(token);
-        let json = serde_json::to_string_pretty(&stored_token)?;
+    fn save_token(&self, token: &StoredToken) -> Result<(), AuthError> {
+        let json = serde_json::to_string_pretty(token)?;
         fs::write(&self.file_path, json)?;
         info!("OAuth token saved to {}", self.file_path.display());
         Ok(())
@@ -133,177 +106,151 @@ impl TokenStorage {
     }
 }
 
-pub struct TokenManager {
-    storage: TokenStorage,
-    current_token: Arc<Mutex<AccessToken>>,
+struct TokenState {
+    access_token: AccessToken,
     refresh_token: Option<RefreshToken>,
+    expires_at: Option<u64>,
 }
 
-impl Clone for TokenManager {
-    fn clone(&self) -> Self {
-        Self {
-            storage: TokenStorage::new().expect("Failed to create token storage"),
-            current_token: Arc::clone(&self.current_token),
-            refresh_token: self.refresh_token.clone(),
-        }
+impl TokenState {
+    fn needs_refresh(&self) -> bool {
+        self.expires_at
+            .is_some_and(|expires_at| unix_now() + EXPIRY_MARGIN_SECS >= expires_at)
     }
+}
+
+/// Hands out a valid access token, transparently refreshing it shortly before
+/// expiry. Clones share the same token state, so a refresh performed through
+/// one clone is visible to all of them.
+#[derive(Clone)]
+pub struct TokenManager {
+    storage: TokenStorage,
+    state: Arc<Mutex<TokenState>>,
 }
 
 impl std::fmt::Debug for TokenManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TokenManager")
-            .field("has_refresh_token", &self.refresh_token.is_some())
+            .field(
+                "has_refresh_token",
+                &self.state.lock().unwrap().refresh_token.is_some(),
+            )
             .finish()
     }
 }
 
 impl TokenManager {
-    pub fn new(token: AccessToken, refresh_token: Option<RefreshToken>) -> Result<Self, AuthError> {
-        let storage = TokenStorage::new()?;
-        Ok(Self {
+    fn from_stored(stored: StoredToken, storage: TokenStorage) -> Self {
+        Self {
             storage,
-            current_token: Arc::new(Mutex::new(token)),
-            refresh_token,
-        })
-    }
-
-    pub fn get_access_token(&self) -> AccessToken {
-        self.current_token.lock().unwrap().clone()
-    }
-
-    /// Get a fresh access token, refreshing if needed
-    pub async fn get_fresh_token(&mut self) -> Result<AccessToken, AuthError> {
-        match self.refresh_if_needed().await {
-            Ok(_) => Ok(self.get_access_token()),
-            Err(e) => Err(e),
+            state: Arc::new(Mutex::new(TokenState {
+                access_token: AccessToken::new(stored.access_token),
+                refresh_token: stored.refresh_token.map(RefreshToken::new),
+                expires_at: stored.expires_at,
+            })),
         }
     }
 
-    pub async fn refresh_if_needed(&mut self) -> Result<(), AuthError> {
-        // Load the refresh token from storage to ensure we have the latest one
-        let refresh_token = if let Ok(Some(stored_token)) = self.storage.load_token() {
-            stored_token.to_refresh_token()
-        } else {
-            self.refresh_token.clone()
+    fn from_token_response(token: &TokenResp, storage: TokenStorage) -> Self {
+        Self {
+            storage,
+            state: Arc::new(Mutex::new(TokenState {
+                access_token: token.access_token().clone(),
+                refresh_token: token.refresh_token().cloned(),
+                expires_at: token.expires_in().map(|d| unix_now() + d.as_secs()),
+            })),
+        }
+    }
+
+    /// Get a valid access token, refreshing it first only when it is about to
+    /// expire.
+    pub async fn get_fresh_token(&mut self) -> Result<AccessToken, AuthError> {
+        let refresh_token = {
+            let state = self.state.lock().unwrap();
+            if !state.needs_refresh() {
+                return Ok(state.access_token.clone());
+            }
+            state.refresh_token.clone().ok_or_else(|| {
+                AuthError::OAuth(
+                    "Access token expired and no refresh token is available".to_string(),
+                )
+            })?
         };
 
-        // Check if we have a refresh token and if the current token is expired
-        if let Some(refresh_token) = refresh_token {
-            match refresh_access_token(refresh_token.clone()).await {
-                Ok(new_token) => {
-                    info!("Successfully refreshed OAuth token during runtime");
-                    self.storage.save_token(new_token.clone())?;
+        let new_token = refresh_access_token(&refresh_token).await?;
+        info!("Refreshed OAuth token");
+        self.storage
+            .save_token(&StoredToken::from_token_response(&new_token))?;
 
-                    // Update the current token
-                    let mut current_token = self.current_token.lock().unwrap();
-                    *current_token = new_token.access_token().clone();
-
-                    // Update the refresh token if a new one was provided
-                    if let Some(new_refresh_token) = new_token.refresh_token() {
-                        self.refresh_token = Some(new_refresh_token.clone());
-                    }
-                }
-                Err(e) => {
-                    return Err(AuthError::OAuth(format!(
-                        "Failed to refresh token during runtime: {}",
-                        e
-                    )));
-                }
-            }
+        let mut state = self.state.lock().unwrap();
+        state.access_token = new_token.access_token().clone();
+        state.expires_at = new_token.expires_in().map(|d| unix_now() + d.as_secs());
+        if let Some(refresh_token) = new_token.refresh_token() {
+            state.refresh_token = Some(refresh_token.clone());
         }
-
-        Ok(())
+        Ok(state.access_token.clone())
     }
 }
 
-pub async fn authenticate() -> Result<TokenManager, AuthError> {
-    let storage = TokenStorage::new()?;
+/// Restore a session from a previously saved token, refreshing it when it has
+/// expired. Returns `None` when a full browser login is required.
+pub async fn try_cached_authentication() -> Option<TokenManager> {
+    let storage = TokenStorage::new().ok()?;
+    let stored = storage.load_token().ok().flatten()?;
+    let mut manager = TokenManager::from_stored(stored, storage);
 
-    // Try to load existing token
-    if let Some(stored_token) = storage.load_token()? {
-        if !stored_token.is_expired() {
-            info!("Using cached OAuth token");
-            let refresh_token = stored_token.to_refresh_token();
-            return TokenManager::new(stored_token.to_access_token(), refresh_token);
+    match manager.get_fresh_token().await {
+        Ok(_) => {
+            info!("Restored session from cached OAuth token");
+            Some(manager)
         }
-
-        info!("Cached OAuth token expired, attempting refresh");
-        // Token is expired, try to refresh it
-        if let Some(refresh_token) = stored_token.to_refresh_token() {
-            if let Ok(new_token) = refresh_access_token(refresh_token.clone()).await {
-                info!("Successfully refreshed OAuth token");
-                storage.save_token(new_token.clone())?;
-                let new_refresh_token = new_token.refresh_token().cloned();
-                return TokenManager::new(new_token.access_token().clone(), new_refresh_token);
-            } else {
-                warn!("Failed to refresh OAuth token, will perform full authentication");
-            }
-        } else {
-            warn!("No refresh token available, will perform full authentication");
+        Err(e) => {
+            warn!("Could not restore cached session: {}", e);
+            None
         }
-    } else {
-        info!("No cached OAuth token found, performing full authentication");
     }
+}
 
-    // No valid token found, perform full authentication
+/// Run the full OAuth2 authorization-code flow: open the user's default
+/// browser on the SoundCloud consent page and wait for the redirect back to a
+/// local listener.
+pub async fn authenticate_in_browser() -> Result<TokenManager, AuthError> {
+    let storage = TokenStorage::new()?;
     info!("Starting OAuth2 authentication flow");
+
     let client = BasicClient::new(ClientId::new(constants::CLIENT_ID.to_string()))
         .set_client_secret(ClientSecret::new(constants::CLIENT_SECRET.to_string()))
         .set_auth_uri(AuthUrl::new(constants::SOUNDCLOUD_AUTH_URL.to_string())?)
         .set_token_uri(TokenUrl::new(constants::SOUNDCLOUD_TOKEN_URL.to_string())?)
         .set_redirect_uri(RedirectUrl::new(constants::REDIRECT_URL.to_string())?);
 
-    // Generate a PKCE challenge.
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
-    // Generate the full authorization URL.
-    let (auth_url, _csrf_token) = client
+    let (auth_url, csrf_token) = client
         .authorize_url(CsrfToken::new_random)
-        // Set the PKCE code challenge.
         .set_pkce_challenge(pkce_challenge)
         .url();
 
-    println!("Browse to: {}", auth_url);
+    // Bind before opening the browser so a busy port fails fast instead of
+    // leaving the user on a dead consent page.
+    let listener = TcpListener::bind(redirect_listen_addr()?).await?;
 
-    let (code, _state) = {
-        // A very naive implementation of the redirect server.
-        let listener = TcpListener::bind("127.0.0.1:32857").unwrap();
+    if let Err(e) = open::that_detached(auth_url.as_str()) {
+        return Err(AuthError::Other(format!(
+            "Could not open your browser ({}). Visit this URL to sign in: {}",
+            e, auth_url
+        )));
+    }
+    info!("Opened browser for SoundCloud authorization");
 
-        // The server will terminate itself after collecting the first code.
-        let Some(mut stream) = listener.incoming().flatten().next() else {
-            panic!("listener terminated without accepting a connection");
-        };
-
-        let mut reader = BufReader::new(&stream);
-
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line).unwrap();
-
-        let redirect_url = request_line.split_whitespace().nth(1).unwrap();
-        let url = Url::parse(&("http://localhost".to_string() + redirect_url)).unwrap();
-
-        let code = url
-            .query_pairs()
-            .find(|(key, _)| key == "code")
-            .map(|(_, code)| AuthorizationCode::new(code.into_owned()))
-            .unwrap();
-
-        let state = url
-            .query_pairs()
-            .find(|(key, _)| key == "state")
-            .map(|(_, state)| CsrfToken::new(state.into_owned()))
-            .unwrap();
-
-        let message = "Go back to your terminal :)";
-        let response = format!(
-            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n{}",
-            message.len(),
-            message
-        );
-        stream.write_all(response.as_bytes()).unwrap();
-
-        (code, state)
-    };
+    let code = tokio::time::timeout(
+        BROWSER_AUTH_TIMEOUT,
+        wait_for_redirect(&listener, csrf_token.secret()),
+    )
+    .await
+    .map_err(|_| {
+        AuthError::OAuth("Timed out waiting for authorization in the browser".to_string())
+    })??;
 
     let http_client = reqwest::ClientBuilder::new()
         // Following redirects opens the client up to SSRF vulnerabilities.
@@ -311,31 +258,122 @@ pub async fn authenticate() -> Result<TokenManager, AuthError> {
         .build()
         .expect("Client should build");
 
-    let token_result = client
+    let token = client
         .exchange_code(code)
         .add_extra_param("client_id", constants::CLIENT_ID.as_str())
         .add_extra_param("client_secret", constants::CLIENT_SECRET.as_str())
-        // Set the PKCE code verifier.
         .set_pkce_verifier(pkce_verifier)
         .request_async(&http_client)
-        .await;
+        .await
+        .map_err(|e| AuthError::OAuth(e.to_string()))?;
 
-    let token = match token_result {
-        Ok(token) => token,
-        Err(e) => return Err(AuthError::OAuth(e.to_string())),
-    };
-
-    // Save the new token
     info!("Saving new OAuth token");
-    storage.save_token(token.clone())?;
+    storage.save_token(&StoredToken::from_token_response(&token))?;
 
-    let refresh_token = token.refresh_token().cloned();
-    TokenManager::new(token.access_token().clone(), refresh_token)
+    Ok(TokenManager::from_token_response(&token, storage))
 }
 
-async fn refresh_access_token(
-    refresh_token: RefreshToken,
-) -> Result<StandardTokenResponse<oauth2::EmptyExtraTokenFields, BasicTokenType>, AuthError> {
+/// The local address the OAuth redirect listener binds to, derived from the
+/// configured redirect URL so the two can never disagree on the port.
+fn redirect_listen_addr() -> Result<String, AuthError> {
+    let url = Url::parse(constants::REDIRECT_URL.as_str())?;
+    let port = url.port_or_known_default().unwrap_or(32857);
+    Ok(format!("127.0.0.1:{}", port))
+}
+
+/// Accept connections until one carries the OAuth redirect, then validate the
+/// CSRF state and extract the authorization code. Unrelated requests (e.g.
+/// favicon fetches) get a 404 and the wait continues.
+async fn wait_for_redirect(
+    listener: &TcpListener,
+    expected_state: &str,
+) -> Result<AuthorizationCode, AuthError> {
+    loop {
+        let (mut stream, _) = listener.accept().await?;
+
+        let mut request_line = String::new();
+        {
+            let mut reader = BufReader::new(&mut stream);
+            reader.read_line(&mut request_line).await?;
+        }
+
+        let Some(path) = request_line.split_whitespace().nth(1) else {
+            continue;
+        };
+        let Ok(url) = Url::parse(&format!("http://localhost{}", path)) else {
+            continue;
+        };
+
+        let query_param = |key: &str| {
+            url.query_pairs()
+                .find(|(k, _)| k == key)
+                .map(|(_, value)| value.into_owned())
+        };
+
+        if let Some(error) = query_param("error") {
+            respond_html(
+                &mut stream,
+                "Sign-in cancelled",
+                "You can close this tab and try again from Rustwave.",
+            )
+            .await;
+            return Err(AuthError::OAuth(match error.as_str() {
+                "access_denied" => "Access was denied in the browser".to_string(),
+                other => format!("Authorization failed: {}", other),
+            }));
+        }
+
+        let Some(code) = query_param("code") else {
+            // Not the OAuth redirect (e.g. a favicon request) - keep waiting
+            let _ = stream
+                .write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n")
+                .await;
+            continue;
+        };
+
+        if query_param("state").as_deref() != Some(expected_state) {
+            respond_html(
+                &mut stream,
+                "Sign-in failed",
+                "The request could not be verified. Please try again from Rustwave.",
+            )
+            .await;
+            return Err(AuthError::OAuth(
+                "CSRF state mismatch in OAuth redirect".to_string(),
+            ));
+        }
+
+        respond_html(
+            &mut stream,
+            "You're signed in",
+            "You can close this tab and return to Rustwave.",
+        )
+        .await;
+        return Ok(AuthorizationCode::new(code));
+    }
+}
+
+/// Send a small self-contained HTML page to the browser and close the
+/// connection. Best-effort: the auth flow already has its result by now.
+async fn respond_html(stream: &mut TcpStream, heading: &str, message: &str) {
+    let body = format!(
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Rustwave</title><style>\
+         body{{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;\
+         background:#1e1e2e;color:#cdd6f4;font-family:-apple-system,system-ui,sans-serif}}\
+         div{{text-align:center}}h1{{color:#cba6f7;margin-bottom:.3em}}p{{color:#a6adc8}}\
+         </style></head><body><div><h1>{}</h1><p>{}</p></div></body></html>",
+        heading, message
+    );
+    let response = format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.shutdown().await;
+}
+
+async fn refresh_access_token(refresh_token: &RefreshToken) -> Result<TokenResp, AuthError> {
     let client = BasicClient::new(ClientId::new(constants::CLIENT_ID.to_string()))
         .set_client_secret(ClientSecret::new(constants::CLIENT_SECRET.to_string()))
         .set_token_uri(TokenUrl::new(constants::SOUNDCLOUD_TOKEN_URL.to_string())?);
@@ -346,7 +384,7 @@ async fn refresh_access_token(
         .expect("Client should build");
 
     let token_result = client
-        .exchange_refresh_token(&refresh_token)
+        .exchange_refresh_token(refresh_token)
         .add_extra_param("client_id", constants::CLIENT_ID.as_str())
         .add_extra_param("client_secret", constants::CLIENT_SECRET.as_str())
         .request_async(&http_client)
@@ -423,12 +461,3 @@ impl From<AuthError> for Box<dyn std::error::Error + Send + 'static> {
         Box::new(err)
     }
 }
-/*
-impl std::error::Error for TokenError {}
-
-impl std::fmt::Display for TokenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Something went wrong with the token request")
-    }
-}
-*/

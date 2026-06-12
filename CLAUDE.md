@@ -27,7 +27,7 @@ The app uses Iced's MVU (Model-View-Update) pattern with a page-based navigation
 
 - **MyApp** (main.rs): Root application managing global playback state, media controls, and page transitions
 - **Page trait**: Common interface for different application screens
-- **AuthPage**: OAuth login flow for SoundCloud
+- **AuthPage**: OAuth login flow for SoundCloud — restores a cached session on startup (skipping the login screen entirely) and otherwise opens the consent page in the default browser
 - **PageB**: Main interface showing tracks, search, and playlist management
 
 ### Audio System
@@ -65,7 +65,7 @@ Messages follow a hierarchical pattern:
 Required in `.env` file (copy from `.env.example`):
 - `CLIENT_ID`: SoundCloud API client ID
 - `CLIENT_SECRET`: SoundCloud API client secret
-- `REDIRECT_URL`: OAuth redirect URL (typically http://localhost:5000/)
+- `REDIRECT_URL`: OAuth redirect URL (defaults to http://localhost:32857/; the login flow binds its local listener on this port)
 
 ### Assets
 - `assets/icon.png`: Application icon used for app bundle generation
@@ -80,7 +80,8 @@ Required in `.env` file (copy from `.env.example`):
 - Progress tracking uses a 100ms timer for responsive UI updates
 
 ### Token Management
-- OAuth tokens are automatically refreshed when expired
+- `TokenManager` clones share token state via `Arc<Mutex<_>>`; `get_fresh_token` only hits the refresh endpoint when the token is within 60s of expiry
+- On startup `auth::try_cached_authentication` restores the saved session (refreshing if needed); `auth::authenticate_in_browser` runs the interactive flow — it binds the redirect listener on the port from `REDIRECT_URL`, opens the system browser, and validates the CSRF state on the redirect
 - Token manager is passed through async operations to maintain authentication state
 - Reauthentication flow redirects back to login page when tokens become invalid
 

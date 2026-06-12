@@ -17,6 +17,7 @@ iced = { version = "0.14", features = ["tokio", "image", "svg", "canvas", "advan
 image = "0.25"
 lazy_static = "1.5.0"
 oauth2 = { version = "5.0", features = ["reqwest-blocking"] }
+open = "5"
 reqwest = { version = "0.12.23", features = ["json"] }
 rodio = { version = "0.21.1", features = ["symphonia-aac"] }
 serde = { version = "1.0.211", features = ["derive"] }

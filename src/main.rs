@@ -212,9 +212,12 @@ impl MyApp {
     }
 
     fn new() -> (Self, Task<Message>) {
+        // The auth page immediately tries to restore a cached session, so
+        // returning users skip the login screen entirely.
+        let (auth_page, auth_task) = AuthPage::new();
         (
             Self {
-                page: Box::new(AuthPage::new()),
+                page: Box::new(auth_page),
                 title: "Nothing".to_string(),
                 user: "Nothing".to_string(),
                 artwork: None,
@@ -228,7 +231,7 @@ impl MyApp {
                 prefetched_track: None,
                 prefetch_in_flight: None,
             },
-            Task::none(),
+            auth_task,
         )
     }
 
