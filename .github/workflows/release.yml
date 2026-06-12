@@ -1,25 +1,10 @@
 name: Multi-Platform Release
 
-# Required GitHub Secrets for macOS Code Signing & Notarization:
+# Required GitHub Secrets:
 #
-# MACOS_CERTIFICATE_P12: Base64-encoded .p12 Developer ID Application certificate
-#   - Export from Keychain Access: File > Export Items > .p12 format
-#   - Encode: base64 -i certificate.p12 | pbcopy
-#
-# MACOS_CERTIFICATE_PASSWORD: Password for the .p12 certificate file
-#
-# APPLE_API_KEY_ID: App Store Connect API Key ID
-#   - Found in App Store Connect > Users and Access > Keys > Key ID
-#
-# APPLE_API_ISSUER_ID: App Store Connect API Issuer ID
-#   - Found in App Store Connect > Users and Access > Keys > Issuer ID
-#
-# APPLE_API_KEY: Raw content of App Store Connect API Key (.p8 file)
-#   - Download from App Store Connect > Users and Access > Keys
-#   - Copy the entire file content (including BEGIN/END lines)
-#
-# APPLE_TEAM_ID: Your Apple Developer Team ID (10 character alphanumeric)
-#   - Found in App Store Connect or developer.apple.com/account
+# macOS bundles are ad-hoc signed (no Apple Developer certificate required).
+# Users must right-click > Open on first launch, or run:
+#   xattr -dr com.apple.quarantine Rustwave.app
 #
 # SOUNDCLOUD_CLIENT_ID: SoundCloud OAuth client ID
 # SOUNDCLOUD_CLIENT_SECRET: SoundCloud OAuth client secret
@@ -167,7 +152,7 @@ jobs:
           cp .env Rustwave.app/Contents/Resources/
           cp -r assets Rustwave.app/Contents/Resources/
 
-          cat > Rustwave.app/Contents/Info.plist << 'EOF'
+          cat > Rustwave.app/Contents/Info.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -217,65 +202,13 @@ jobs:
 
           chmod +x Rustwave.app/Contents/MacOS/rustwave
 
-      - name: Install rcodesign
+      - name: Ad-hoc sign the app bundle
         run: |
-          curl -L https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.27.0/apple-codesign-0.27.0-x86_64-apple-darwin.tar.gz -o rcodesign.tar.gz
-          tar -xzf rcodesign.tar.gz
-          chmod +x apple-codesign-*/rcodesign
-          sudo mv apple-codesign-*/rcodesign /usr/local/bin/
-
-      - name: Setup signing certificate
-        run: |
-          echo "${{ secrets.MACOS_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
-
-      - name: Code sign the app bundle
-        run: |
-          rcodesign sign \
-            --p12-file certificate.p12 \
-            --p12-password "${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" \
-            --code-signature-flags runtime \
-            Rustwave.app
+          codesign --force --deep --sign - Rustwave.app
 
           # Verify the signature
           codesign -v Rustwave.app
           codesign -dvv Rustwave.app
-
-      - name: Create App Store Connect API key
-        run: |
-          # Write the .p8 key to a file
-          cat > AuthKey.p8 << 'EOF'
-          ${{ secrets.APPLE_API_KEY }}
-          EOF
-
-          # Encode the API credentials into a JSON file using rcodesign
-          rcodesign encode-app-store-connect-api-key \
-            -o api-key.json \
-            "${{ secrets.APPLE_API_ISSUER_ID }}" \
-            "${{ secrets.APPLE_API_KEY_ID }}" \
-            AuthKey.p8
-
-      - name: Notarize the app bundle
-        run: |
-          # Create a ZIP for notarization
-          ditto -c -k --keepParent Rustwave.app Rustwave.zip
-
-          # Submit for notarization using the JSON credential file
-          rcodesign notary-submit \
-            --api-key-file api-key.json \
-            --wait \
-            Rustwave.zip
-
-          # Staple the notarization ticket
-          xcrun stapler staple Rustwave.app
-
-          # Verify notarization
-          xcrun stapler validate Rustwave.app
-          spctl -a -v Rustwave.app
-
-      - name: Cleanup secrets
-        if: always()
-        run: |
-          rm -f certificate.p12 AuthKey.p8 api-key.json Rustwave.zip
 
       - name: Create archive
         run: |
@@ -350,7 +283,7 @@ jobs:
           cp .env Rustwave.app/Contents/Resources/
           cp -r assets Rustwave.app/Contents/Resources/
 
-          cat > Rustwave.app/Contents/Info.plist << 'EOF'
+          cat > Rustwave.app/Contents/Info.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -400,65 +333,13 @@ jobs:
 
           chmod +x Rustwave.app/Contents/MacOS/rustwave
 
-      - name: Install rcodesign
+      - name: Ad-hoc sign the app bundle
         run: |
-          curl -L https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.27.0/apple-codesign-0.27.0-aarch64-apple-darwin.tar.gz -o rcodesign.tar.gz
-          tar -xzf rcodesign.tar.gz
-          chmod +x apple-codesign-*/rcodesign
-          sudo mv apple-codesign-*/rcodesign /usr/local/bin/
-
-      - name: Setup signing certificate
-        run: |
-          echo "${{ secrets.MACOS_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
-
-      - name: Code sign the app bundle
-        run: |
-          rcodesign sign \
-            --p12-file certificate.p12 \
-            --p12-password "${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" \
-            --code-signature-flags runtime \
-            Rustwave.app
+          codesign --force --deep --sign - Rustwave.app
 
           # Verify the signature
           codesign -v Rustwave.app
           codesign -dvv Rustwave.app
-
-      - name: Create App Store Connect API key
-        run: |
-          # Write the .p8 key to a file
-          cat > AuthKey.p8 << 'EOF'
-          ${{ secrets.APPLE_API_KEY }}
-          EOF
-
-          # Encode the API credentials into a JSON file using rcodesign
-          rcodesign encode-app-store-connect-api-key \
-            -o api-key.json \
-            "${{ secrets.APPLE_API_ISSUER_ID }}" \
-            "${{ secrets.APPLE_API_KEY_ID }}" \
-            AuthKey.p8
-
-      - name: Notarize the app bundle
-        run: |
-          # Create a ZIP for notarization
-          ditto -c -k --keepParent Rustwave.app Rustwave.zip
-
-          # Submit for notarization using the JSON credential file
-          rcodesign notary-submit \
-            --api-key-file api-key.json \
-            --wait \
-            Rustwave.zip
-
-          # Staple the notarization ticket
-          xcrun stapler staple Rustwave.app
-
-          # Verify notarization
-          xcrun stapler validate Rustwave.app
-          spctl -a -v Rustwave.app
-
-      - name: Cleanup secrets
-        if: always()
-        run: |
-          rm -f certificate.p12 AuthKey.p8 api-key.json Rustwave.zip
 
       - name: Create archive
         run: |
