@@ -59,6 +59,12 @@ impl QueueManager {
         None
     }
 
+    /// Peek at the next track without advancing the queue position
+    pub fn peek_next(&self) -> Option<&SoundCloudTrack> {
+        let current = self.current_index?;
+        self.queue.get(current + 1)
+    }
+
     /// Check if there's a next track available
     pub fn has_next(&self) -> bool {
         if let Some(current) = self.current_index {

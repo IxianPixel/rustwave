@@ -11,8 +11,22 @@ use tokio::sync::oneshot;
 /// How many segment downloads to keep in flight at once
 const SEGMENT_CONCURRENCY: usize = 8;
 
+/// How many segments a prefetch buffers before pausing until the track is
+/// actually played (~10s of audio each)
+const PREFETCH_SEGMENTS: usize = 2;
+
 /// Rough ADTS bytes per second at 160 kbps, used to pre-size the audio buffer
 const BUFFER_BYTES_PER_SEC: usize = 20_000;
+
+type StreamResult = Result<
+    (
+        Arc<SharedAudioBuffer>,
+        Option<Handle>,
+        Option<Vec<f32>>,
+        TokenManager,
+    ),
+    (String, TokenManager),
+>;
 
 /// Resolves a track's HLS stream and starts buffering it in the background,
 /// fetching artwork and waveform peaks concurrently. Returns as soon as the
@@ -22,15 +36,25 @@ const BUFFER_BYTES_PER_SEC: usize = 20_000;
 pub async fn download_track_stream(
     token_manager: TokenManager,
     track: &SoundCloudTrack,
-) -> Result<
-    (
-        Arc<SharedAudioBuffer>,
-        Option<Handle>,
-        Option<Vec<f32>>,
-        TokenManager,
-    ),
-    (String, TokenManager),
-> {
+) -> StreamResult {
+    start_track_stream(token_manager, track, None).await
+}
+
+/// Like download_track_stream, but for the *next* queue track: the download
+/// pauses after a couple of segments and resumes only when the buffer is
+/// activated (i.e. the track starts playing) or stops if it is cancelled.
+pub async fn prefetch_track_stream(
+    token_manager: TokenManager,
+    track: &SoundCloudTrack,
+) -> StreamResult {
+    start_track_stream(token_manager, track, Some(PREFETCH_SEGMENTS)).await
+}
+
+async fn start_track_stream(
+    token_manager: TokenManager,
+    track: &SoundCloudTrack,
+    prefetch_window: Option<usize>,
+) -> StreamResult {
     // First, get the streaming URLs from the /tracks/{id}/streams endpoint
     let (streams, mut token_manager) =
         match api_helpers::get_track_streams_with_refresh(token_manager, track.id).await {
@@ -78,6 +102,7 @@ pub async fn download_track_stream(
     let buffer = SharedAudioBuffer::new(
         playlist.segment_urls.len() as u32,
         capacity.min(64 * 1024 * 1024),
+        prefetch_window.is_none(),
     );
 
     // Download and demux in the background; ready_rx fires once the first
@@ -88,6 +113,7 @@ pub async fn download_track_stream(
         playlist,
         Arc::clone(&buffer),
         ready_tx,
+        prefetch_window,
     ));
 
     // Artwork and waveform download concurrently with the audio buffering
@@ -139,11 +165,19 @@ async fn run_hls_download(
     playlist: api::HlsPlaylist,
     buffer: Arc<SharedAudioBuffer>,
     ready_tx: oneshot::Sender<Result<(), String>>,
+    prefetch_window: Option<usize>,
 ) {
     let _guard = FinishGuard(Arc::clone(&buffer));
     let mut ready_tx = Some(ready_tx);
 
-    let result = download_loop(&token_secret, &playlist, &buffer, &mut ready_tx).await;
+    let result = download_loop(
+        &token_secret,
+        &playlist,
+        &buffer,
+        &mut ready_tx,
+        prefetch_window,
+    )
+    .await;
 
     if let Err(e) = &result {
         eprintln!("HLS download failed: {}", e);
@@ -158,6 +192,7 @@ async fn download_loop(
     playlist: &api::HlsPlaylist,
     buffer: &SharedAudioBuffer,
     ready_tx: &mut Option<oneshot::Sender<Result<(), String>>>,
+    prefetch_window: Option<usize>,
 ) -> Result<(), String> {
     let mut demuxer = api::HlsDemuxer::new();
 
@@ -168,9 +203,45 @@ async fn download_loop(
         demuxer.push_init(&init);
     }
 
-    // Pipelined, ordered segment downloads: up to SEGMENT_CONCURRENCY in
-    // flight, demuxed and appended as each one completes
-    let urls = playlist.segment_urls.clone();
+    // For a prefetch, only the head of the playlist is fetched up front; the
+    // tail waits until the buffer is activated
+    let mut urls = playlist.segment_urls.clone();
+    let tail = match prefetch_window {
+        Some(window) => urls.split_off(window.min(urls.len())),
+        None => Vec::new(),
+    };
+
+    if fetch_and_demux(urls, token_secret, &mut demuxer, buffer, ready_tx).await? {
+        return Ok(()); // cancelled
+    }
+
+    if !tail.is_empty() {
+        buffer.wait_until_active().await;
+        if buffer.is_cancelled() {
+            return Ok(());
+        }
+        if fetch_and_demux(tail, token_secret, &mut demuxer, buffer, ready_tx).await? {
+            return Ok(());
+        }
+    }
+
+    buffer.append(&demuxer.finish());
+
+    if buffer.available() == 0 {
+        return Err("No AAC audio data found in stream".to_string());
+    }
+    Ok(())
+}
+
+/// Downloads the given segments (pipelined, in order), demuxing each into the
+/// buffer as it arrives. Returns Ok(true) if the buffer was cancelled.
+async fn fetch_and_demux(
+    urls: Vec<String>,
+    token_secret: &str,
+    demuxer: &mut api::HlsDemuxer,
+    buffer: &SharedAudioBuffer,
+    ready_tx: &mut Option<oneshot::Sender<Result<(), String>>>,
+) -> Result<bool, String> {
     let mut segments = futures::stream::iter(urls.into_iter().map(|url: String| {
         let token = token_secret.to_string();
         async move { api::fetch_segment(&token, &url).await }
@@ -179,7 +250,7 @@ async fn download_loop(
 
     while let Some(result) = segments.next().await {
         if buffer.is_cancelled() {
-            return Ok(());
+            return Ok(true);
         }
         let segment = result.map_err(|e| e.to_string())?;
         let adts = demuxer.push_segment(&segment).map_err(|e| e.to_string())?;
@@ -192,10 +263,5 @@ async fn download_loop(
         }
     }
 
-    buffer.append(&demuxer.finish());
-
-    if buffer.available() == 0 {
-        return Err("No AAC audio data found in stream".to_string());
-    }
-    Ok(())
+    Ok(false)
 }

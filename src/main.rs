@@ -73,6 +73,14 @@ enum Message {
         crate::soundcloud::TokenManager,
     ),
     QueueStreamFailed(String, crate::soundcloud::TokenManager),
+    NextTrackPrefetched(
+        u64, // track id the prefetch was for
+        std::sync::Arc<crate::managers::audio_buffer::SharedAudioBuffer>,
+        Option<Handle>,
+        Option<Vec<f32>>,
+        crate::soundcloud::TokenManager,
+    ),
+    NextTrackPrefetchFailed(String, crate::soundcloud::TokenManager),
     NavigateToSearch,
     NavigateToLikes,
     NavigateToFeed,
@@ -87,6 +95,14 @@ trait Page {
     }
 }
 
+/// A prefetched stream for the next queue track, ready to play instantly
+struct PrefetchedTrack {
+    track_id: u64,
+    buffer: std::sync::Arc<crate::managers::audio_buffer::SharedAudioBuffer>,
+    artwork: Option<Handle>,
+    waveform_peaks: Option<Vec<f32>>,
+}
+
 struct MyApp {
     page: Box<dyn Page>,
     title: String,
@@ -99,6 +115,8 @@ struct MyApp {
     pending_stream_download: bool, // Flag to track if we're downloading the next track
     token_manager: Option<crate::soundcloud::TokenManager>, // Store token manager for queue operations
     settings: config::AppSettings,
+    prefetched_track: Option<PrefetchedTrack>, // Buffered stream for the next queue track
+    prefetch_in_flight: Option<u64>,           // Track id of a prefetch currently downloading
 }
 
 impl MyApp {
@@ -119,6 +137,20 @@ impl MyApp {
         self.audio_manager.sink.clear();
         self.pending_stream_download = true;
 
+        // Use the prefetched stream if it's for this track; otherwise it's
+        // stale, so stop its download
+        if let Some(prefetched) = self.prefetched_track.take() {
+            if prefetched.track_id == track.id {
+                return Task::done(Message::QueueStreamDownloaded(
+                    prefetched.buffer,
+                    prefetched.artwork,
+                    prefetched.waveform_peaks,
+                    token_manager,
+                ));
+            }
+            prefetched.buffer.cancel();
+        }
+
         let track_clone = track.clone();
         Task::perform(
             async move { crate::managers::download_track_stream(token_manager, &track_clone).await },
@@ -132,6 +164,49 @@ impl MyApp {
                     )
                 }
                 Err((error, token_manager)) => Message::QueueStreamFailed(error, token_manager),
+            },
+        )
+    }
+
+    /// Start prefetching the next queue track's stream, if there is one and
+    /// it isn't already prefetched or in flight
+    fn start_next_track_prefetch(&mut self) -> Task<Message> {
+        let Some(next) = self.queue_manager.peek_next() else {
+            return Task::none();
+        };
+        if next.stream_url.is_none() {
+            return Task::none();
+        }
+        let next_id = next.id;
+        if self
+            .prefetched_track
+            .as_ref()
+            .is_some_and(|p| p.track_id == next_id)
+            || self.prefetch_in_flight == Some(next_id)
+        {
+            return Task::none();
+        }
+        let Some(token_manager) = self.token_manager.clone() else {
+            return Task::none();
+        };
+
+        self.prefetch_in_flight = Some(next_id);
+        let track = next.clone();
+        Task::perform(
+            async move { crate::managers::prefetch_track_stream(token_manager, &track).await },
+            move |result| match result {
+                Ok((buffer, artwork, waveform_peaks, token_manager)) => {
+                    Message::NextTrackPrefetched(
+                        next_id,
+                        buffer,
+                        artwork,
+                        waveform_peaks,
+                        token_manager,
+                    )
+                }
+                Err((error, token_manager)) => {
+                    Message::NextTrackPrefetchFailed(error, token_manager)
+                }
             },
         )
     }
@@ -150,6 +225,8 @@ impl MyApp {
                 pending_stream_download: false,
                 token_manager: None,
                 settings: config::load_settings(),
+                prefetched_track: None,
+                prefetch_in_flight: None,
             },
             Task::none(),
         )
@@ -208,6 +285,44 @@ impl MyApp {
                     &self.user,
                     self.audio_manager.track_duration,
                 );
+
+                // Start buffering the next queue track so it can play instantly
+                self.start_next_track_prefetch()
+            }
+            Message::NextTrackPrefetched(
+                track_id,
+                buffer,
+                artwork,
+                waveform_peaks,
+                token_manager,
+            ) => {
+                self.token_manager = Some(token_manager);
+                self.prefetch_in_flight = None;
+
+                // Only keep the prefetch if it's still the next track in the queue
+                if self
+                    .queue_manager
+                    .peek_next()
+                    .is_some_and(|t| t.id == track_id)
+                {
+                    if let Some(old) = self.prefetched_track.replace(PrefetchedTrack {
+                        track_id,
+                        buffer,
+                        artwork,
+                        waveform_peaks,
+                    }) {
+                        old.buffer.cancel();
+                    }
+                } else {
+                    buffer.cancel();
+                }
+                Task::none()
+            }
+            Message::NextTrackPrefetchFailed(error, token_manager) => {
+                // Non-fatal: the track will download normally when played
+                eprintln!("Failed to prefetch next track: {}", error);
+                self.prefetch_in_flight = None;
+                self.token_manager = Some(token_manager);
                 Task::none()
             }
             Message::QueueStreamFailed(error, token_manager) => {

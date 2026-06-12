@@ -39,6 +39,7 @@ The app uses Iced's MVU (Model-View-Update) pattern with a page-based navigation
 - **QueueManager** (managers/queue.rs): Handles track queues with next/previous navigation
 - **Stream download** (managers/stream.rs): Resolves the HLS playlist and streams segments into a `SharedAudioBuffer` (managers/audio_buffer.rs) in a background task; playback starts once the first segment is buffered, while the rest of the track keeps downloading
 - **HlsDemuxer** (soundcloud/api.rs): Incrementally demuxes fMP4 or MPEG-TS segments to a continuous AAC ADTS stream, one segment at a time
+- **Next-track prefetch** (main.rs + managers/stream.rs): while a track plays, the next queue track's stream is resolved and its first segments buffered, then the download pauses until the buffer is activated (track starts) or cancelled (queue changed); `start_track_download` consumes a matching prefetch for instant starts
 - Queue starts from selected track and continues through the track list
 
 ### API Integration

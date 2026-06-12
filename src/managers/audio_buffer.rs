@@ -8,6 +8,8 @@ use std::sync::{Arc, Condvar, Mutex};
 pub struct SharedAudioBuffer {
     inner: Mutex<Inner>,
     data_available: Condvar,
+    // Wakes a prefetch download task waiting for activation
+    activation: tokio::sync::Notify,
     total_segments: u32,
 }
 
@@ -15,21 +17,51 @@ struct Inner {
     data: Vec<u8>,
     finished: bool,
     cancelled: bool,
+    // When false, the download task pauses after the prefetch window until
+    // the buffer becomes the playing track (or is cancelled)
+    activated: bool,
     completed_segments: u32,
 }
 
 impl SharedAudioBuffer {
-    pub fn new(total_segments: u32, capacity_hint: usize) -> Arc<Self> {
+    pub fn new(total_segments: u32, capacity_hint: usize, start_active: bool) -> Arc<Self> {
         Arc::new(Self {
             inner: Mutex::new(Inner {
                 data: Vec::with_capacity(capacity_hint),
                 finished: false,
                 cancelled: false,
+                activated: start_active,
                 completed_segments: 0,
             }),
             data_available: Condvar::new(),
+            activation: tokio::sync::Notify::new(),
             total_segments,
         })
+    }
+
+    /// Allow a prefetch download to continue past its initial window.
+    /// No-op for buffers that started active.
+    pub fn activate(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.activated = true;
+        drop(inner);
+        self.activation.notify_waiters();
+    }
+
+    /// Wait until the buffer is activated or cancelled.
+    pub async fn wait_until_active(&self) {
+        loop {
+            // Register for notification before checking state, so an
+            // activate()/cancel() between the check and the await isn't lost
+            let notified = self.activation.notified();
+            {
+                let inner = self.inner.lock().unwrap();
+                if inner.activated || inner.cancelled {
+                    return;
+                }
+            }
+            notified.await;
+        }
     }
 
     /// Append the demuxed audio for one completed segment. `data` may be empty
@@ -69,6 +101,7 @@ impl SharedAudioBuffer {
         inner.finished = true;
         drop(inner);
         self.data_available.notify_all();
+        self.activation.notify_waiters();
     }
 
     pub fn is_cancelled(&self) -> bool {
@@ -177,7 +210,7 @@ mod tests {
 
     #[test]
     fn read_blocks_until_data_arrives_and_eof_after_finish() {
-        let buffer = SharedAudioBuffer::new(2, 0);
+        let buffer = SharedAudioBuffer::new(2, 0, true);
         let mut reader = buffer.reader_at(0);
 
         let writer = {
@@ -202,7 +235,7 @@ mod tests {
 
     #[test]
     fn cancel_unblocks_reader_and_keeps_data() {
-        let buffer = SharedAudioBuffer::new(10, 0);
+        let buffer = SharedAudioBuffer::new(10, 0, true);
         buffer.append_segment(&[9, 9]);
         let mut reader = buffer.reader_at(2); // positioned past available data
 
@@ -223,9 +256,39 @@ mod tests {
         assert_eq!(buffer.available(), 2, "buffered data survives cancel");
     }
 
+    #[tokio::test]
+    async fn wait_until_active_resumes_on_activate_and_on_cancel() {
+        // activate() releases the gate
+        let buffer = SharedAudioBuffer::new(4, 0, false);
+        let waiter = tokio::spawn({
+            let buffer = Arc::clone(&buffer);
+            async move { buffer.wait_until_active().await }
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert!(!waiter.is_finished(), "must wait while inactive");
+        buffer.activate();
+        tokio::time::timeout(Duration::from_secs(1), waiter)
+            .await
+            .expect("activate must release the gate")
+            .unwrap();
+
+        // cancel() releases the gate too
+        let buffer = SharedAudioBuffer::new(4, 0, false);
+        let waiter = tokio::spawn({
+            let buffer = Arc::clone(&buffer);
+            async move { buffer.wait_until_active().await }
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        buffer.cancel();
+        tokio::time::timeout(Duration::from_secs(1), waiter)
+            .await
+            .expect("cancel must release the gate")
+            .unwrap();
+    }
+
     #[test]
     fn estimated_total_extrapolates_from_segment_progress() {
-        let buffer = SharedAudioBuffer::new(4, 0);
+        let buffer = SharedAudioBuffer::new(4, 0, true);
         buffer.append_segment(&[0u8; 100]);
         assert_eq!(buffer.estimated_total(), 400);
         buffer.append_segment(&[0u8; 300]);

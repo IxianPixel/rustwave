@@ -115,6 +115,9 @@ impl AudioManager {
             old.cancel();
         }
 
+        // Resume the download if this buffer was a paused prefetch
+        buffer.activate();
+
         self.position_offset = Duration::from_secs(0);
 
         // Recreate a fresh Sink on our existing, long-lived stream's mixer
