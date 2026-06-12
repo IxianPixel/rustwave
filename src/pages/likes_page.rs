@@ -3,11 +3,12 @@ use crate::models::SoundCloudTrack;
 use crate::pages::{FeedPage, SearchPage, UserPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
+use crate::widgets::{loading_state, spinner};
 use crate::{Message, Page};
 use iced::advanced::widget::{Id, operate, operation};
 use iced::widget::image::Handle;
 use iced::widget::scrollable::AbsoluteOffset;
-use iced::widget::{Scrollable, button, column, float, sensor, stack, text};
+use iced::widget::{Scrollable, button, column, container, float, sensor, stack, text};
 use iced::{Color, Length, Task, Vector};
 
 #[derive(Debug, Clone)]
@@ -57,7 +58,8 @@ impl LikesPage {
 
 impl Page for LikesPage {
     fn is_animating(&self) -> bool {
-        self.track_list.is_animating()
+        // Keep frames flowing while the loading spinner is on screen.
+        self.track_list.is_animating() || self.is_loading
     }
 
     fn update(&mut self, message: Message) -> (Option<Box<dyn Page>>, Task<Message>) {
@@ -239,14 +241,11 @@ impl Page for LikesPage {
             // Bottom sentinel: fires LoadMoreFavourites when scrolled near the end.
             // Keyed on the track count so it re-triggers after each page is appended.
             tracks_column = tracks_column.push(
-                sensor(text("Loading more tracks..."))
+                sensor(container(spinner(24.0)).center_x(Length::Fill).padding(8))
                     .on_show(|_| Message::LikesPage(Ml::LoadMoreFavourites))
                     .anticipate(LOAD_MORE_THRESHOLD)
                     .key(self.track_list.tracks().len()),
             );
-        } else if self.is_loading {
-            // Initial load (no next page known yet)
-            tracks_column = tracks_column.push(text("Loading tracks..."));
         }
 
         let mut content = column![];
@@ -254,6 +253,12 @@ impl Page for LikesPage {
             content =
                 content.push(text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)));
         }
+
+        if self.track_list.tracks().is_empty() && self.is_loading {
+            // Initial load: no tracks to show yet, so fill the page with a spinner.
+            return content.push(loading_state()).into();
+        }
+
         content = content.push(
             Scrollable::new(tracks_column)
                 .id(SCROLL_ID)

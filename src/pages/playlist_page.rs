@@ -9,11 +9,12 @@ use crate::pages::UserPage;
 use crate::pages::{FeedPage, SearchPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
+use crate::widgets::{loading_state, spinner};
 use iced::Color;
 use iced::Length;
 use iced::Task;
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, sensor, text};
+use iced::widget::{Scrollable, container, sensor, text};
 use tracing::debug;
 
 // Start loading the next page when the bottom sentinel is within 500px of the viewport
@@ -63,7 +64,8 @@ impl PlaylistPage {
 
 impl Page for PlaylistPage {
     fn is_animating(&self) -> bool {
-        self.track_list.is_animating()
+        // Keep frames flowing while the loading spinner is on screen.
+        self.track_list.is_animating() || self.tracks_loading
     }
 
     fn update(&mut self, message: Message) -> (Option<Box<dyn Page>>, Task<Message>) {
@@ -230,7 +232,7 @@ impl Page for PlaylistPage {
         if self.tracks_next_href.is_some() {
             // Bottom sentinel: loads the next page of tracks when scrolled near the end.
             tracks_column = tracks_column.push(
-                sensor(text("Loading more tracks..."))
+                sensor(container(spinner(24.0)).center_x(Length::Fill).padding(8))
                     .on_show(|_| Message::PlaylistPage(Mp::LoadMoreTracks))
                     .anticipate(LOAD_MORE_THRESHOLD)
                     .key(self.track_list.tracks().len()),
@@ -242,6 +244,12 @@ impl Page for PlaylistPage {
             content =
                 content.push(text("Error Loading Tracks").color(Color::from_rgb(1.0, 0.0, 0.0)));
         }
+
+        if self.track_list.tracks().is_empty() && self.tracks_loading {
+            // Initial load: no tracks to show yet, so fill the page with a spinner.
+            return content.push(loading_state()).into();
+        }
+
         content
             .push(
                 Scrollable::new(tracks_column)

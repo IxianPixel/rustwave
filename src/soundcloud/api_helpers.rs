@@ -191,6 +191,40 @@ pub async fn get_user_tracks_with_refresh(
     }
 }
 
+pub async fn get_user_liked_tracks_with_refresh(
+    mut token_manager: TokenManager,
+    user_urn: String,
+    next_href: Option<String>,
+) -> Result<(SoundCloudTracks, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => match api::get_user_liked_tracks(token, user_urn, next_href).await {
+            Ok(tracks) => Ok((tracks, token_manager)),
+            Err(e) => Err((
+                AuthError::Other(format!("Failed to load user liked tracks: {}", e)),
+                token_manager,
+            )),
+        },
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
+pub async fn get_user_reposted_tracks_with_refresh(
+    mut token_manager: TokenManager,
+    user_urn: String,
+    next_href: Option<String>,
+) -> Result<(SoundCloudTracks, TokenManager), (AuthError, TokenManager)> {
+    match token_manager.get_fresh_token().await {
+        Ok(token) => match api::get_user_reposted_tracks(token, user_urn, next_href).await {
+            Ok(tracks) => Ok((tracks, token_manager)),
+            Err(e) => Err((
+                AuthError::Other(format!("Failed to load user reposted tracks: {}", e)),
+                token_manager,
+            )),
+        },
+        Err(e) => Err((e, token_manager)),
+    }
+}
+
 pub async fn get_user_playlists_with_refresh(
     mut token_manager: TokenManager,
     user_urn: String,

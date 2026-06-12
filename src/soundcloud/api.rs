@@ -370,6 +370,82 @@ pub async fn get_playlist_tracks(
     Ok(body)
 }
 
+pub async fn get_user_liked_tracks(
+    access_token: AccessToken,
+    user_urn: String,
+    next_href: Option<String>,
+) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
+    let c = reqwest::Client::new();
+
+    let url = next_href
+        .unwrap_or_else(|| format!("https://api.soundcloud.com/users/{}/likes/tracks", user_urn));
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
+            ("access", "playable,blocked"),
+            ("limit", "50"),
+            ("linked_partitioning", "true"),
+        ]);
+    }
+
+    let response = request.send().await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudTracks>().await?;
+    Ok(body)
+}
+
+pub async fn get_user_reposted_tracks(
+    access_token: AccessToken,
+    user_urn: String,
+    next_href: Option<String>,
+) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
+    let c = reqwest::Client::new();
+
+    let url = next_href.unwrap_or_else(|| {
+        format!(
+            "https://api.soundcloud.com/users/{}/reposts/tracks",
+            user_urn
+        )
+    });
+
+    let mut request = c.get(&url).bearer_auth(access_token.secret());
+
+    // Only add query parameters if using the default URL (not a pagination URL)
+    if !url.contains("?") {
+        request = request.query(&[
+            ("access", "playable,blocked"),
+            ("limit", "50"),
+            ("linked_partitioning", "true"),
+        ]);
+    }
+
+    let response = request.send().await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
+        return Err(format!("HTTP {} error: {}", status, error_text).into());
+    }
+
+    let body = response.json::<SoundCloudTracks>().await?;
+    Ok(body)
+}
+
 /// Fetches the streaming URLs for a track from the /tracks/{id}/streams endpoint
 pub async fn get_track_streams(
     access_token: AccessToken,

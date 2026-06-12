@@ -6,10 +6,10 @@ use crate::models::{
 use crate::pages::{LikesPage, PlaylistPage, UserPage};
 use crate::soundcloud::TokenManager;
 use crate::soundcloud::api_helpers;
-use crate::widgets::{get_playlist_widget, get_user_widget};
+use crate::widgets::{get_playlist_widget, get_user_widget, loading_state, spinner};
 use crate::{Message, Page};
 use iced::widget::image::Handle;
-use iced::widget::{Scrollable, column, grid, row, sensor, text, text_input};
+use iced::widget::{Scrollable, column, container, grid, row, sensor, text_input};
 use iced::{Length, Task};
 use std::collections::HashMap;
 use tracing::debug;
@@ -44,6 +44,8 @@ const LOAD_MORE_THRESHOLD: f32 = 500.0;
 pub struct SearchPage {
     token_manager: TokenManager,
     search_query: String,
+    // A full search (users + tracks + playlists) is in flight.
+    searching: bool,
     user_load_failed: bool,
     user_images: HashMap<String, Handle>,
     users: Vec<SoundCloudUser>,
@@ -60,6 +62,7 @@ impl SearchPage {
         Self {
             token_manager,
             search_query: String::new(),
+            searching: false,
             user_load_failed: false,
             user_images: HashMap::new(),
             users: Vec::new(),
@@ -75,7 +78,11 @@ impl SearchPage {
 
 impl Page for SearchPage {
     fn is_animating(&self) -> bool {
+        // Keep frames flowing while a loading spinner is on screen.
         self.track_list.is_animating()
+            || self.searching
+            || self.tracks_loading
+            || self.playlists_loading
     }
 
     fn update(&mut self, message: Message) -> (Option<Box<dyn Page>>, Task<Message>) {
@@ -87,6 +94,7 @@ impl Page for SearchPage {
                 }
                 SearchPageMessage::Search(query) => {
                     self.search_query = query.clone();
+                    self.searching = true;
                     let token_manager = self.token_manager.clone();
                     let search_query = self.search_query.clone();
 
@@ -107,6 +115,7 @@ impl Page for SearchPage {
                 }
                 SearchPageMessage::SearchCompletedWithToken(results, token_manager) => {
                     self.token_manager = token_manager;
+                    self.searching = false;
                     self.user_load_failed = false;
                     self.users = results.users.clone();
                     self.playlists = results.playlists.clone();
@@ -211,6 +220,7 @@ impl Page for SearchPage {
                 }
                 SearchPageMessage::ApiErrorWithToken(error_msg, token_manager) => {
                     self.token_manager = token_manager;
+                    self.searching = false;
                     self.user_load_failed = true;
                     self.tracks_loading = false;
                     self.playlists_loading = false;
@@ -327,7 +337,7 @@ impl Page for SearchPage {
         if self.tracks_next_href.is_some() {
             // Bottom sentinel: loads the next page of tracks when scrolled near the end.
             tracks_column = tracks_column.push(
-                sensor(text("Loading more tracks..."))
+                sensor(container(spinner(24.0)).center_x(Length::Fill).padding(8))
                     .on_show(|_| Message::SearchPage(Ms::LoadMoreTracks))
                     .anticipate(LOAD_MORE_THRESHOLD)
                     .key(self.track_list.tracks().len()),
@@ -348,20 +358,27 @@ impl Page for SearchPage {
         if self.playlists_next_href.is_some() {
             // Bottom sentinel: loads the next page of playlists when scrolled near the end.
             playlists_content = playlists_content.push(
-                sensor(text("Loading more playlists..."))
+                sensor(container(spinner(24.0)).center_x(Length::Fill).padding(8))
                     .on_show(|_| Message::SearchPage(Ms::LoadMorePlaylists))
                     .anticipate(LOAD_MORE_THRESHOLD)
                     .key(self.playlists.len()),
             );
         }
 
+        let search_bar = row![
+            text_input("Search", self.search_query.as_str())
+                .on_submit(Message::SearchPage(Ms::Search(self.search_query.clone())))
+                .on_input(|s| Message::SearchPage(Ms::SearchPressed(s))),
+        ]
+        .spacing(10);
+
+        if self.searching {
+            // A search is in flight: replace the results area with a spinner.
+            return column![search_bar, loading_state()].into();
+        }
+
         column![
-            row![
-                text_input("Search", self.search_query.as_str())
-                    .on_submit(Message::SearchPage(Ms::Search(self.search_query.clone())))
-                    .on_input(|s| Message::SearchPage(Ms::SearchPressed(s))),
-            ]
-            .spacing(10),
+            search_bar,
             row![users_grid].spacing(10),
             row![
                 Scrollable::new(tracks_column)
