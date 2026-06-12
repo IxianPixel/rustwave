@@ -12,6 +12,7 @@ Rustwave is a SoundCloud music player built with Rust and the Iced GUI framework
 - `cargo build --release` - Build optimized release binary
 - `cargo run` - Run in development mode
 - `./build_app.sh` - Create macOS app bundle (requires .env file and assets)
+- `cargo bundle --release --format osx` - Create macOS app bundle via cargo-bundle (used by release CI; metadata in `[package.metadata.bundle]` in Cargo.toml; requires `cargo install cargo-bundle`)
 - `./run_app.sh` - Quick run script
 - `open Rustwave.app` - Launch the built macOS app
 
