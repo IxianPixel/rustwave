@@ -67,7 +67,7 @@ enum Message {
         crate::soundcloud::TokenManager,
     ),
     QueueStreamDownloaded(
-        tokio_util::bytes::Bytes,
+        std::sync::Arc<crate::managers::audio_buffer::SharedAudioBuffer>,
         Option<Handle>,
         Option<Vec<f32>>,
         crate::soundcloud::TokenManager,
@@ -324,10 +324,7 @@ impl MyApp {
                         // Repeat current track - reload from stored data
                         if let Some(track_data) = self.audio_manager.current_track_data.clone() {
                             // Reload the track using the stored data
-                            if let Err(e) = self
-                                .audio_manager
-                                .load_track(tokio_util::bytes::Bytes::from(track_data))
-                            {
+                            if let Err(e) = self.audio_manager.load_track(track_data) {
                                 eprintln!("Failed to reload track for repeat: {}", e);
                             }
                         }

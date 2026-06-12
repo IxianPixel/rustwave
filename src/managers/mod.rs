@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod audio_buffer;
 pub mod queue;
 pub mod stream;
 pub mod track_list;

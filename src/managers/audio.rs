@@ -1,7 +1,12 @@
-use std::{io::Cursor, sync::mpsc, time::Duration};
+use std::{
+    sync::{Arc, mpsc},
+    time::Duration,
+};
 
 use rodio::{Decoder, OutputStream, Sink};
 use souvlaki::{MediaControls, MediaMetadata, MediaPlayback, PlatformConfig};
+
+use crate::managers::audio_buffer::SharedAudioBuffer;
 
 /// Find the start of an ADTS frame at or before the given byte offset
 fn find_adts_frame_start(data: &[u8], target_offset: usize) -> usize {
@@ -54,8 +59,8 @@ pub struct AudioManager {
     pub track_position: Duration,
     pub progress_bar_value: f32,
     pub stream_loading: bool,
-    pub current_track_data: Option<Vec<u8>>, // Store the current track data for backward seeking
-    position_offset: Duration,               // Offset to add to sink.get_pos() after seeking
+    pub current_track_data: Option<Arc<SharedAudioBuffer>>, // Streamed track data, also used for backward seeking
+    position_offset: Duration, // Offset to add to sink.get_pos() after seeking
     media_controls: MediaControls,
     pub media_event_receiver: mpsc::Receiver<souvlaki::MediaControlEvent>,
 }
@@ -100,18 +105,28 @@ impl AudioManager {
         }
     }
 
-    /// Load and play a track from byte data
-    pub fn load_track(&mut self, track_data: tokio_util::bytes::Bytes) -> Result<(), String> {
-        // Store the track data for potential backward seeking workaround
-        self.current_track_data = Some(track_data.to_vec());
+    /// Load and play a track from a (possibly still downloading) audio buffer
+    pub fn load_track(&mut self, buffer: Arc<SharedAudioBuffer>) -> Result<(), String> {
+        // Stop the previous track's download and wake any reader blocked on
+        // it, so its source drains off the shared mixer
+        if let Some(old) = self.current_track_data.take()
+            && !Arc::ptr_eq(&old, &buffer)
+        {
+            old.cancel();
+        }
+
         self.position_offset = Duration::from_secs(0);
 
         // Recreate a fresh Sink on our existing, long-lived stream's mixer
         self.sink = Sink::connect_new(self.stream.mixer());
 
-        let source = Decoder::new(Cursor::new(track_data))
+        let source = Decoder::builder()
+            .with_data(buffer.reader_at(0))
+            .with_hint("aac")
+            .build()
             .map_err(|e| format!("Failed to create decoder: {}", e))?;
 
+        self.current_track_data = Some(buffer);
         self.sink.clear();
         self.sink.append(source);
         self.sink.play();
@@ -184,30 +199,54 @@ impl AudioManager {
     /// Seek to an absolute position by recreating the decoder from the appropriate byte offset
     /// For ADTS streams, we calculate the byte offset and find the nearest frame boundary
     pub fn seek_to_absolute(&mut self, position: Duration) -> bool {
-        let Some(ref track_data) = self.current_track_data else {
+        let Some(buffer) = self.current_track_data.clone() else {
             return false;
         };
 
         let was_paused = self.sink.is_paused();
 
+        let available = buffer.available();
+        if available == 0 {
+            return false;
+        }
+        // While the download is still running the final size is extrapolated
+        // from segment progress; exact once complete
+        let estimated_total = buffer.estimated_total().max(available);
+
         // Calculate byte offset based on time position ratio
         let target_bytes = if self.track_duration.as_secs_f64() > 0.0 {
             let ratio = position.as_secs_f64() / self.track_duration.as_secs_f64();
-            (ratio * track_data.len() as f64) as usize
+            (ratio * estimated_total as f64) as usize
         } else {
             0
         };
 
-        // Find the nearest ADTS frame boundary at or before target_bytes
-        let start_offset = find_adts_frame_start(track_data, target_bytes);
+        // Clamp to downloaded data so the audio thread never blocks waiting
+        // for a far-ahead seek target
+        let clamped_bytes = target_bytes.min(available.saturating_sub(1));
+
+        // Find the nearest ADTS frame boundary at or before the target
+        let start_offset = buffer.with_data(|data| find_adts_frame_start(data, clamped_bytes));
+
+        // If we had to clamp, report the position actually seeked to
+        let effective_position = if clamped_bytes < target_bytes {
+            self.track_duration
+                .mul_f64(clamped_bytes as f64 / estimated_total as f64)
+        } else {
+            position
+        };
 
         // Recreate the sink and decoder from the offset
         self.sink = Sink::connect_new(self.stream.mixer());
 
-        match Decoder::new(Cursor::new(track_data[start_offset..].to_vec())) {
+        match Decoder::builder()
+            .with_data(buffer.reader_at(start_offset))
+            .with_hint("aac")
+            .build()
+        {
             Ok(source) => {
                 self.sink.append(source);
-                self.position_offset = position;
+                self.position_offset = effective_position;
 
                 if was_paused {
                     self.sink.pause();
@@ -218,7 +257,11 @@ impl AudioManager {
             }
             Err(_) => {
                 // Fall back to playing from beginning
-                if let Ok(source) = Decoder::new(Cursor::new(track_data.clone())) {
+                if let Ok(source) = Decoder::builder()
+                    .with_data(buffer.reader_at(0))
+                    .with_hint("aac")
+                    .build()
+                {
                     self.sink.append(source);
                     self.position_offset = Duration::from_secs(0);
                     if was_paused {
@@ -288,6 +331,10 @@ impl AudioManager {
 
     /// Clear the current track and stop playback
     pub fn clear(&mut self) {
+        // Stop any in-flight download and unblock its reader
+        if let Some(buffer) = &self.current_track_data {
+            buffer.cancel();
+        }
         self.sink.clear();
         let _ = self.media_controls.set_playback(MediaPlayback::Stopped);
     }

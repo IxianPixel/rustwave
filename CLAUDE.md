@@ -36,8 +36,9 @@ The app uses Iced's MVU (Model-View-Update) pattern with a page-based navigation
 - Custom backward seeking workaround that recreates the audio source when needed
 
 ### Queue Management
-- **QueueManager** (queue_manager.rs): Handles track queues with next/previous navigation
-- **StreamManager** (stream_manager.rs): Downloads and caches audio streams
+- **QueueManager** (managers/queue.rs): Handles track queues with next/previous navigation
+- **Stream download** (managers/stream.rs): Resolves the HLS playlist and streams segments into a `SharedAudioBuffer` (managers/audio_buffer.rs) in a background task; playback starts once the first segment is buffered, while the rest of the track keeps downloading
+- **HlsDemuxer** (soundcloud/api.rs): Incrementally demuxes fMP4 or MPEG-TS segments to a continuous AAC ADTS stream, one segment at a time
 - Queue starts from selected track and continues through the track list
 
 ### API Integration
@@ -72,8 +73,9 @@ Required in `.env` file (copy from `.env.example`):
 ## Important Implementation Details
 
 ### Audio Playback Quirks
-- Backward seeking requires a workaround that recreates the audio source due to rodio limitations
-- Track data is cached in memory to enable this backward seeking functionality
+- Tracks play from a `SharedAudioBuffer` that fills while the HLS download runs; rodio reads it through a blocking `StreamReader` (the decoder is built non-seekable, so symphonia never probes the stream end)
+- Backward seeking requires a workaround that recreates the audio source due to rodio limitations; the buffer holds the full ADTS stream once the download completes, and seeks clamp to the downloaded portion while it is in flight
+- When replacing a track, the old buffer must be cancelled before the old sink is dropped — a reader blocked in `read()` would otherwise stall the shared mixer thread
 - Progress tracking uses a 100ms timer for responsive UI updates
 
 ### Token Management

@@ -1,3 +1,6 @@
+use std::sync::OnceLock;
+use std::time::Duration;
+
 use oauth2::AccessToken;
 use tokio::try_join;
 use tokio_util::bytes::Bytes;
@@ -7,20 +10,24 @@ use crate::models::{
     SoundCloudTrack, SoundCloudTracks, SoundCloudUser, SoundCloudUserProfile, SoundCloudUsers,
 };
 
-/// Type alias for async HLS download result
-type HlsDownloadFuture<'a> = std::pin::Pin<
-    Box<
-        dyn std::future::Future<Output = Result<Bytes, Box<dyn std::error::Error + Send + Sync>>>
-            + Send
-            + 'a,
-    >,
->;
+/// Shared HTTP client so TLS handshakes and connections are reused across all
+/// API calls and HLS segment downloads.
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to build HTTP client")
+    })
+}
 
 pub async fn get_liked_tracks_paginated(
     access_token: AccessToken,
     next_href: Option<String>,
 ) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/me/likes/tracks".to_string());
 
@@ -54,7 +61,7 @@ pub async fn get_activity_feed_paginated(
     access_token: AccessToken,
     next_href: Option<String>,
 ) -> Result<SoundCloudActivityCollection, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url =
         next_href.unwrap_or_else(|| "https://api.soundcloud.com/me/activities/tracks".to_string());
@@ -90,7 +97,7 @@ pub async fn search_tracks(
     query: &str,
     next_href: Option<String>,
 ) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/tracks".to_string());
 
@@ -126,7 +133,7 @@ pub async fn search_playlists(
     query: &str,
     next_href: Option<String>,
 ) -> Result<SoundCloudPlaylists, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href.unwrap_or_else(|| "https://api.soundcloud.com/playlists".to_string());
 
@@ -161,7 +168,7 @@ pub async fn search_user(
     access_token: AccessToken,
     query: &str,
 ) -> Result<Vec<SoundCloudUser>, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
     let response = c
         .get("https://api.soundcloud.com/users")
         .query(&[
@@ -210,7 +217,7 @@ pub async fn like_track(
     track: SoundCloudTrack,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let u = format!("https://api.soundcloud.com/likes/tracks/{}", track.id);
-    let c = reqwest::Client::new();
+    let c = http_client();
     c.post(u).bearer_auth(access_token.secret()).send().await?;
 
     Ok(())
@@ -220,7 +227,7 @@ pub async fn get_user(
     access_token: AccessToken,
     user_urn: String,
 ) -> Result<SoundCloudUser, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
     let response = c
         .get(format!("https://api.soundcloud.com/users/{}", user_urn))
         .bearer_auth(access_token.secret())
@@ -245,7 +252,7 @@ pub async fn get_user_tracks(
     user_urn: String,
     next_href: Option<String>,
 ) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href
         .unwrap_or_else(|| format!("https://api.soundcloud.com/users/{}/tracks", user_urn));
@@ -281,7 +288,7 @@ pub async fn get_user_playlists(
     user_urn: String,
     next_href: Option<String>,
 ) -> Result<SoundCloudPlaylists, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href
         .unwrap_or_else(|| format!("https://api.soundcloud.com/users/{}/playlists", user_urn));
@@ -335,7 +342,7 @@ pub async fn get_playlist_tracks(
     playlist_urn: String,
     next_href: Option<String>,
 ) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href.unwrap_or_else(|| {
         format!(
@@ -375,7 +382,7 @@ pub async fn get_user_liked_tracks(
     user_urn: String,
     next_href: Option<String>,
 ) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href
         .unwrap_or_else(|| format!("https://api.soundcloud.com/users/{}/likes/tracks", user_urn));
@@ -411,7 +418,7 @@ pub async fn get_user_reposted_tracks(
     user_urn: String,
     next_href: Option<String>,
 ) -> Result<SoundCloudTracks, Box<dyn std::error::Error + Send + Sync>> {
-    let c = reqwest::Client::new();
+    let c = http_client();
 
     let url = next_href.unwrap_or_else(|| {
         format!(
@@ -451,7 +458,7 @@ pub async fn get_track_streams(
     access_token: AccessToken,
     track_id: u64,
 ) -> Result<SoundCloudStreams, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
+    let client = http_client();
     let url = format!("https://api.soundcloud.com/tracks/{}/streams", track_id);
 
     let response = client
@@ -527,167 +534,266 @@ fn find_box_recursive(
     None
 }
 
-/// Extracts AAC audio from fMP4 and converts to ADTS format for better seeking support
-fn extract_aac_from_fmp4(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    // Parse AudioSpecificConfig from moov/trak/mdia/minf/stbl/stsd/mp4a/esds
-    // We need: object_type, sample_rate_index, channel_config
+/// Reads a 32-bit big-endian MP4 box size at the given offset
+fn read_box_size(data: &[u8], offset: usize) -> usize {
+    u32::from_be_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ]) as usize
+}
 
-    let containers: &[&[u8; 4]] = &[
-        b"moov", b"trak", b"mdia", b"minf", b"stbl", b"stsd", b"mp4a",
-    ];
+/// Checks whether a payload already starts with an ADTS sync word
+/// (some encoders include ADTS headers inside mdat)
+fn payload_is_adts(payload: &[u8]) -> bool {
+    payload.len() >= 2 && payload[0] == 0xFF && (payload[1] & 0xF0) == 0xF0
+}
 
-    // Find esds box
-    let esds_data = if let Some((offset, size)) = find_box_recursive(data, b"esds", containers) {
-        if offset + size <= data.len() {
-            Some(&data[offset..offset + size])
+#[derive(Clone, Copy, PartialEq)]
+enum ContainerKind {
+    Fmp4,
+    MpegTs,
+}
+
+/// Incremental demuxer that converts HLS segments (fMP4 or MPEG-TS) into a
+/// continuous AAC ADTS stream one segment at a time, so playback can start
+/// before the full track has downloaded.
+pub struct HlsDemuxer {
+    kind: Option<ContainerKind>,
+    // AudioSpecificConfig used to build ADTS headers (fMP4 path).
+    // Defaults: AAC-LC, 44100 Hz, stereo.
+    object_type: u8,
+    sample_rate_index: u8,
+    channel_config: u8,
+    // Whether mdat payloads already carry ADTS headers (checked on first mdat)
+    mdat_is_adts: Option<bool>,
+    // Bytes of an incomplete box carried across segment boundaries
+    fmp4_remainder: Vec<u8>,
+    // MPEG-TS state: partial TS packet and PES bytes not yet framed
+    ts_remainder: Vec<u8>,
+    pes_buffer: Vec<u8>,
+    found_first_frame: bool,
+    expected_profile: Option<u8>,
+    expected_sample_rate: Option<u8>,
+}
+
+impl HlsDemuxer {
+    pub fn new() -> Self {
+        Self {
+            kind: None,
+            object_type: 2,
+            sample_rate_index: 4,
+            channel_config: 2,
+            mdat_is_adts: None,
+            fmp4_remainder: Vec::new(),
+            ts_remainder: Vec::new(),
+            pes_buffer: Vec::new(),
+            found_first_frame: false,
+            expected_profile: None,
+            expected_sample_rate: None,
+        }
+    }
+
+    /// Feed the EXT-X-MAP initialization segment (ftyp + moov) to parse the
+    /// AudioSpecificConfig
+    pub fn push_init(&mut self, data: &[u8]) {
+        self.kind = Some(ContainerKind::Fmp4);
+        self.parse_asc(data);
+    }
+
+    /// Demux one media segment, returning the ADTS bytes it produced. Bytes
+    /// belonging to frames that span into the next segment are carried over.
+    pub fn push_segment(
+        &mut self,
+        data: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        let kind = match self.kind {
+            Some(kind) => kind,
+            None => {
+                let detected = Self::detect_container(data)?;
+                self.kind = Some(detected);
+                detected
+            }
+        };
+
+        match kind {
+            ContainerKind::Fmp4 => Ok(self.demux_fmp4(data)),
+            ContainerKind::MpegTs => {
+                self.ingest_ts(data);
+                Ok(self.scan_adts_frames(false))
+            }
+        }
+    }
+
+    /// Flush any frames held back waiting for more data
+    pub fn finish(&mut self) -> Vec<u8> {
+        match self.kind {
+            Some(ContainerKind::MpegTs) => self.scan_adts_frames(true),
+            // A trailing fMP4 remainder is an incomplete box; nothing playable
+            _ => Vec::new(),
+        }
+    }
+
+    fn detect_container(
+        data: &[u8],
+    ) -> Result<ContainerKind, Box<dyn std::error::Error + Send + Sync>> {
+        if data.len() >= 8
+            && (&data[4..8] == b"ftyp"
+                || &data[4..8] == b"styp"
+                || &data[4..8] == b"moov"
+                || &data[4..8] == b"moof")
+        {
+            Ok(ContainerKind::Fmp4)
+        } else if data.first() == Some(&0x47) {
+            Ok(ContainerKind::MpegTs)
         } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    // Default AAC-LC parameters if we can't parse esds
-    let mut object_type: u8 = 2; // AAC-LC
-    let mut sample_rate_index: u8 = 4; // 44100 Hz
-    let mut channel_config: u8 = 2; // Stereo
-
-    if let Some(esds) = esds_data {
-        // esds box: 4 bytes size, 4 bytes type, 4 bytes version/flags, then ES_Descriptor
-        // We need to find the DecoderSpecificInfo which contains AudioSpecificConfig
-        // Search for the pattern: tag 0x05 followed by length and ASC
-        for i in 12..esds.len().saturating_sub(4) {
-            if esds[i] == 0x05 {
-                // DecoderSpecificInfo tag
-                let len_byte = esds.get(i + 1).copied().unwrap_or(0);
-                let asc_start = i + 2;
-                if len_byte >= 2 && asc_start + 2 <= esds.len() {
-                    // AudioSpecificConfig: 5 bits object type, 4 bits sample rate index, 4 bits channel config
-                    let byte0 = esds[asc_start];
-                    let byte1 = esds[asc_start + 1];
-                    object_type = (byte0 >> 3) & 0x1F;
-                    sample_rate_index = ((byte0 & 0x07) << 1) | ((byte1 >> 7) & 0x01);
-                    channel_config = (byte1 >> 3) & 0x0F;
-                    break;
-                }
-            }
+            Err("Unrecognized HLS segment container format".into())
         }
     }
 
-    // Collect all mdat box contents
-    let mut raw_aac_data = Vec::new();
-    let mut offset = 0;
-    while offset + 8 <= data.len() {
-        let size = u32::from_be_bytes([
-            data[offset],
-            data[offset + 1],
-            data[offset + 2],
-            data[offset + 3],
-        ]) as usize;
-        let btype = &data[offset + 4..offset + 8];
+    /// Parse AudioSpecificConfig from moov/trak/mdia/minf/stbl/stsd/mp4a/esds
+    fn parse_asc(&mut self, data: &[u8]) {
+        let containers: &[&[u8; 4]] = &[
+            b"moov", b"trak", b"mdia", b"minf", b"stbl", b"stsd", b"mp4a",
+        ];
 
-        if size < 8 || offset + size > data.len() {
-            break;
-        }
+        let esds_data = find_box_recursive(data, b"esds", containers)
+            .and_then(|(offset, size)| data.get(offset..offset + size));
 
-        if btype == b"mdat" {
-            // mdat payload starts after 8-byte header
-            let payload_start = offset + 8;
-            let payload_end = offset + size;
-            if payload_start < payload_end {
-                raw_aac_data.extend_from_slice(&data[payload_start..payload_end]);
-            }
-        }
-
-        offset += size;
-    }
-
-    if raw_aac_data.is_empty() {
-        return Err("No mdat boxes found in fMP4".into());
-    }
-
-    // Check if mdat already contains ADTS frames (some encoders include headers)
-    if raw_aac_data.len() >= 2 && raw_aac_data[0] == 0xFF && (raw_aac_data[1] & 0xF0) == 0xF0 {
-        return Ok(raw_aac_data);
-    }
-
-    // Parse sample sizes from moof/traf/trun boxes
-    // Each moof+mdat pair is a fragment
-    let mut adts_data = Vec::new();
-
-    // Process each fragment (moof + mdat pair)
-    let mut box_offset = 0;
-    while box_offset + 8 <= data.len() {
-        let box_size = u32::from_be_bytes([
-            data[box_offset],
-            data[box_offset + 1],
-            data[box_offset + 2],
-            data[box_offset + 3],
-        ]) as usize;
-        let box_type = &data[box_offset + 4..box_offset + 8];
-
-        if box_size < 8 || box_offset + box_size > data.len() {
-            break;
-        }
-
-        if box_type == b"moof" {
-            // Find trun inside moof/traf to get sample sizes
-            let moof_data = &data[box_offset..box_offset + box_size];
-            if let Some(sample_sizes) = parse_trun_sample_sizes(moof_data) {
-                // Find the following mdat
-                let next_box_offset = box_offset + box_size;
-                if next_box_offset + 8 <= data.len() {
-                    let next_size = u32::from_be_bytes([
-                        data[next_box_offset],
-                        data[next_box_offset + 1],
-                        data[next_box_offset + 2],
-                        data[next_box_offset + 3],
-                    ]) as usize;
-                    let next_type = &data[next_box_offset + 4..next_box_offset + 8];
-
-                    if next_type == b"mdat" && next_box_offset + next_size <= data.len() {
-                        let mdat_payload = &data[next_box_offset + 8..next_box_offset + next_size];
-                        let mut sample_offset = 0;
-
-                        for sample_size in &sample_sizes {
-                            let sample_size = *sample_size as usize;
-                            if sample_offset + sample_size <= mdat_payload.len() {
-                                let sample =
-                                    &mdat_payload[sample_offset..sample_offset + sample_size];
-
-                                // Create ADTS header
-                                let frame_length = 7 + sample_size;
-                                let mut header = [0u8; 7];
-                                header[0] = 0xFF;
-                                header[1] = 0xF1;
-                                let profile = object_type.saturating_sub(1) & 0x03;
-                                header[2] = (profile << 6)
-                                    | (sample_rate_index << 2)
-                                    | ((channel_config >> 2) & 0x01);
-                                header[3] = ((channel_config & 0x03) << 6)
-                                    | ((frame_length >> 11) & 0x03) as u8;
-                                header[4] = ((frame_length >> 3) & 0xFF) as u8;
-                                header[5] = (((frame_length & 0x07) << 5) | 0x1F) as u8;
-                                header[6] = 0xFC;
-
-                                adts_data.extend_from_slice(&header);
-                                adts_data.extend_from_slice(sample);
-                                sample_offset += sample_size;
-                            }
-                        }
+        if let Some(esds) = esds_data {
+            // esds box: 4 bytes size, 4 bytes type, 4 bytes version/flags, then
+            // ES_Descriptor. Search for the DecoderSpecificInfo (tag 0x05)
+            // which contains the AudioSpecificConfig.
+            for i in 12..esds.len().saturating_sub(4) {
+                if esds[i] == 0x05 {
+                    let len_byte = esds.get(i + 1).copied().unwrap_or(0);
+                    let asc_start = i + 2;
+                    if len_byte >= 2 && asc_start + 2 <= esds.len() {
+                        // ASC: 5 bits object type, 4 bits sample rate index, 4 bits channel config
+                        let byte0 = esds[asc_start];
+                        let byte1 = esds[asc_start + 1];
+                        self.object_type = (byte0 >> 3) & 0x1F;
+                        self.sample_rate_index = ((byte0 & 0x07) << 1) | ((byte1 >> 7) & 0x01);
+                        self.channel_config = (byte1 >> 3) & 0x0F;
+                        break;
                     }
                 }
             }
         }
-
-        box_offset += box_size;
     }
 
-    if adts_data.is_empty() {
-        return Err("Failed to extract AAC frames from fMP4".into());
+    fn demux_fmp4(&mut self, data: &[u8]) -> Vec<u8> {
+        // Prepend bytes carried over from the previous segment boundary
+        let owned;
+        let data: &[u8] = if self.fmp4_remainder.is_empty() {
+            data
+        } else {
+            self.fmp4_remainder.extend_from_slice(data);
+            owned = std::mem::take(&mut self.fmp4_remainder);
+            &owned
+        };
+
+        let mut out = Vec::new();
+        let mut offset = 0;
+
+        while offset + 8 <= data.len() {
+            let size = read_box_size(data, offset);
+            let btype = &data[offset + 4..offset + 8];
+
+            if size < 8 {
+                break;
+            }
+            if offset + size > data.len() {
+                // Incomplete box: keep it for the next segment
+                self.fmp4_remainder = data[offset..].to_vec();
+                return out;
+            }
+
+            match btype {
+                // moov can appear inline when there is no EXT-X-MAP init segment
+                b"moov" => self.parse_asc(&data[offset..offset + size]),
+                b"moof" => {
+                    // A moof's samples live in the mdat that follows it; if
+                    // that mdat isn't fully here yet, carry both over.
+                    let moof_end = offset + size;
+                    if moof_end + 8 > data.len() {
+                        self.fmp4_remainder = data[offset..].to_vec();
+                        return out;
+                    }
+                    let mdat_size = read_box_size(data, moof_end);
+                    let mdat_type = &data[moof_end + 4..moof_end + 8];
+                    if mdat_type != b"mdat" || mdat_size < 8 {
+                        offset = moof_end;
+                        continue;
+                    }
+                    if moof_end + mdat_size > data.len() {
+                        self.fmp4_remainder = data[offset..].to_vec();
+                        return out;
+                    }
+
+                    let payload = &data[moof_end + 8..moof_end + mdat_size];
+                    if *self
+                        .mdat_is_adts
+                        .get_or_insert_with(|| payload_is_adts(payload))
+                    {
+                        out.extend_from_slice(payload);
+                    } else if let Some(sample_sizes) =
+                        parse_trun_sample_sizes(&data[offset..moof_end])
+                    {
+                        self.write_adts_frames(payload, &sample_sizes, &mut out);
+                    }
+
+                    offset = moof_end + mdat_size;
+                    continue;
+                }
+                b"mdat" => {
+                    // mdat without a preceding moof is only usable if the
+                    // payload already carries ADTS headers
+                    let payload = &data[offset + 8..offset + size];
+                    if *self
+                        .mdat_is_adts
+                        .get_or_insert_with(|| payload_is_adts(payload))
+                    {
+                        out.extend_from_slice(payload);
+                    }
+                }
+                _ => {}
+            }
+
+            offset += size;
+        }
+
+        out
     }
 
-    Ok(adts_data)
+    /// Wrap raw AAC samples in ADTS headers using the parsed ASC parameters
+    fn write_adts_frames(&self, payload: &[u8], sample_sizes: &[u32], out: &mut Vec<u8>) {
+        let mut sample_offset = 0;
+        for &sample_size in sample_sizes {
+            let sample_size = sample_size as usize;
+            if sample_offset + sample_size > payload.len() {
+                break;
+            }
+
+            let frame_length = 7 + sample_size;
+            let mut header = [0u8; 7];
+            header[0] = 0xFF;
+            header[1] = 0xF1;
+            let profile = self.object_type.saturating_sub(1) & 0x03;
+            header[2] = (profile << 6)
+                | (self.sample_rate_index << 2)
+                | ((self.channel_config >> 2) & 0x01);
+            header[3] = ((self.channel_config & 0x03) << 6) | ((frame_length >> 11) & 0x03) as u8;
+            header[4] = ((frame_length >> 3) & 0xFF) as u8;
+            header[5] = (((frame_length & 0x07) << 5) | 0x1F) as u8;
+            header[6] = 0xFC;
+
+            out.extend_from_slice(&header);
+            out.extend_from_slice(&payload[sample_offset..sample_offset + sample_size]);
+            sample_offset += sample_size;
+        }
+    }
 }
 
 /// Parse sample sizes from trun box inside moof
@@ -797,229 +903,391 @@ fn parse_trun_box(trun_data: &[u8]) -> Option<Vec<u32>> {
     if sizes.is_empty() { None } else { Some(sizes) }
 }
 
-/// Extracts AAC ADTS frames from MPEG-TS container data.
-///
-/// Parses TS packets to extract payloads, then scans for valid ADTS frames
-/// with sync word validation between consecutive frames.
-fn extract_aac_from_mpegts(
-    data: &[u8],
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    const TS_PACKET_SIZE: usize = 188;
+impl HlsDemuxer {
+    /// Extract TS packet payloads into the PES buffer. A partial trailing
+    /// packet is carried over to the next segment.
+    fn ingest_ts(&mut self, data: &[u8]) {
+        const TS_PACKET_SIZE: usize = 188;
 
-    let mut offset = 0;
+        let owned;
+        let data: &[u8] = if self.ts_remainder.is_empty() {
+            data
+        } else {
+            self.ts_remainder.extend_from_slice(data);
+            owned = std::mem::take(&mut self.ts_remainder);
+            &owned
+        };
 
-    // Find TS sync byte
-    while offset < data.len() && data[offset] != 0x47 {
-        offset += 1;
+        let mut offset = 0;
+        while offset < data.len() {
+            // Resync on the TS sync byte
+            if data[offset] != 0x47 {
+                offset += 1;
+                continue;
+            }
+            if offset + TS_PACKET_SIZE > data.len() {
+                self.ts_remainder = data[offset..].to_vec();
+                return;
+            }
+
+            let packet = &data[offset..offset + TS_PACKET_SIZE];
+            offset += TS_PACKET_SIZE;
+
+            let adaptation_field_control = (packet[3] >> 4) & 0x03;
+            if adaptation_field_control == 2 {
+                continue; // No payload
+            }
+
+            let mut payload_offset = 4;
+            if adaptation_field_control == 3 {
+                payload_offset = 5 + packet[4] as usize;
+            }
+
+            if payload_offset < TS_PACKET_SIZE {
+                self.pes_buffer.extend_from_slice(&packet[payload_offset..]);
+            }
+        }
     }
 
-    // Collect all TS packet payloads
-    let mut pes_buffer: Vec<u8> = Vec::new();
+    /// Consume complete, validated ADTS frames from the PES buffer. Frames
+    /// that need more data (incomplete, or a first frame lacking lookahead to
+    /// validate) stay buffered unless `eos` is set.
+    fn scan_adts_frames(&mut self, eos: bool) -> Vec<u8> {
+        let buf = &self.pes_buffer;
+        let mut out = Vec::new();
+        let mut i = 0;
 
-    while offset + TS_PACKET_SIZE <= data.len() {
-        if data[offset] != 0x47 {
-            offset += 1;
-            continue;
-        }
+        while i + 7 <= buf.len() {
+            // Check for ADTS sync word: 0xFFF
+            if buf[i] == 0xFF && (buf[i + 1] & 0xF0) == 0xF0 {
+                let layer = (buf[i + 1] >> 1) & 0x03;
+                let profile = (buf[i + 2] >> 6) & 0x03;
+                let sample_rate_idx = (buf[i + 2] >> 2) & 0x0F;
 
-        let packet = &data[offset..offset + TS_PACKET_SIZE];
-        offset += TS_PACKET_SIZE;
+                // Validate: layer must be 0, sample rate index must not be 15
+                if layer == 0 && sample_rate_idx != 15 {
+                    let frame_length = (((buf[i + 3] & 0x03) as usize) << 11)
+                        | ((buf[i + 4] as usize) << 3)
+                        | ((buf[i + 5] >> 5) as usize);
 
-        let adaptation_field_control = (packet[3] >> 4) & 0x03;
-        if adaptation_field_control == 2 {
-            continue; // No payload
-        }
-
-        let mut payload_offset = 4;
-        if adaptation_field_control == 3 && packet.len() > 4 {
-            payload_offset = 5 + packet[4] as usize;
-        }
-
-        if payload_offset < TS_PACKET_SIZE {
-            pes_buffer.extend_from_slice(&packet[payload_offset..]);
-        }
-    }
-
-    // Scan for ADTS frames with validation
-    let mut adts_data = Vec::new();
-    let mut i = 0;
-    let mut found_first_frame = false;
-    let mut expected_profile: Option<u8> = None;
-    let mut expected_sample_rate: Option<u8> = None;
-
-    while i + 7 <= pes_buffer.len() {
-        // Check for ADTS sync word: 0xFFF
-        if pes_buffer[i] == 0xFF && (pes_buffer[i + 1] & 0xF0) == 0xF0 {
-            let layer = (pes_buffer[i + 1] >> 1) & 0x03;
-            let profile = (pes_buffer[i + 2] >> 6) & 0x03;
-            let sample_rate_idx = (pes_buffer[i + 2] >> 2) & 0x0F;
-
-            // Validate: layer must be 0, sample rate index must not be 15
-            if layer == 0 && sample_rate_idx != 15 {
-                let frame_length = (((pes_buffer[i + 3] & 0x03) as usize) << 11)
-                    | ((pes_buffer[i + 4] as usize) << 3)
-                    | ((pes_buffer[i + 5] >> 5) as usize);
-
-                if (7..=8192).contains(&frame_length) && i + frame_length <= pes_buffer.len() {
-                    // For first frame, require next frame validation
-                    // For subsequent frames, check profile/sample rate consistency
-                    let valid = if !found_first_frame {
-                        // For first frame, look ahead for another sync word
-                        let mut has_next = false;
-                        let mut j = i + frame_length;
-                        while j + 7 <= pes_buffer.len() && j < i + frame_length + 20 {
-                            if pes_buffer[j] == 0xFF && (pes_buffer[j + 1] & 0xF0) == 0xF0 {
-                                has_next = true;
-                                break;
+                    if (7..=8192).contains(&frame_length) {
+                        if i + frame_length > buf.len() {
+                            if eos {
+                                // Truncated final frame: drop it
+                                i += 1;
+                                continue;
                             }
-                            j += 1;
+                            break; // wait for the rest of the frame
                         }
-                        has_next || i + frame_length >= pes_buffer.len() - 20
-                    } else {
-                        // For subsequent frames, check consistency with first frame
-                        expected_profile.is_none_or(|p| p == profile)
-                            && expected_sample_rate.is_none_or(|s| s == sample_rate_idx)
-                    };
 
-                    if valid {
-                        if !found_first_frame {
-                            found_first_frame = true;
-                            expected_profile = Some(profile);
-                            expected_sample_rate = Some(sample_rate_idx);
+                        let valid = if !self.found_first_frame {
+                            // Validate the first frame by finding another sync
+                            // word right after it
+                            let lookahead_end = i + frame_length + 20;
+                            let mut has_next = false;
+                            let mut j = i + frame_length;
+                            while j + 7 <= buf.len() && j < lookahead_end {
+                                if buf[j] == 0xFF && (buf[j + 1] & 0xF0) == 0xF0 {
+                                    has_next = true;
+                                    break;
+                                }
+                                j += 1;
+                            }
+                            if has_next {
+                                true
+                            } else if !eos && lookahead_end + 7 > buf.len() {
+                                break; // not enough lookahead yet
+                            } else {
+                                // At end of stream, accept a final frame close
+                                // to the end of the data
+                                eos && i + frame_length >= buf.len().saturating_sub(20)
+                            }
+                        } else {
+                            // Subsequent frames must match the first frame
+                            self.expected_profile.is_none_or(|p| p == profile)
+                                && self
+                                    .expected_sample_rate
+                                    .is_none_or(|s| s == sample_rate_idx)
+                        };
+
+                        if valid {
+                            if !self.found_first_frame {
+                                self.found_first_frame = true;
+                                self.expected_profile = Some(profile);
+                                self.expected_sample_rate = Some(sample_rate_idx);
+                            }
+                            out.extend_from_slice(&buf[i..i + frame_length]);
+                            i += frame_length;
+                            continue;
                         }
-                        adts_data.extend_from_slice(&pes_buffer[i..i + frame_length]);
-                        i += frame_length;
-                        continue;
                     }
                 }
             }
+            i += 1;
         }
-        i += 1;
-    }
 
-    if adts_data.is_empty() {
-        return Err("No AAC audio data found in stream".into());
+        self.pes_buffer.drain(..i);
+        out
     }
-
-    Ok(adts_data)
 }
 
-/// Downloads HLS stream by parsing the m3u8 playlist and fetching all segments
-pub fn download_hls_stream(token_secret: String, hls_url: &str) -> HlsDownloadFuture<'_> {
-    Box::pin(async move {
-        let client = reqwest::Client::new();
+/// A resolved HLS media playlist: the optional fMP4 init segment plus the
+/// ordered media segment URLs
+pub struct HlsPlaylist {
+    pub init_url: Option<String>,
+    pub segment_urls: Vec<String>,
+}
 
-        // Fetch the master playlist
-        let playlist_response = client
-            .get(hls_url)
-            .bearer_auth(&token_secret)
-            .send()
-            .await?;
-        let playlist_text = playlist_response.text().await?;
+/// Resolves a relative segment/variant URI against the playlist's parent URL
+fn resolve_uri(base_url: &str, uri: &str) -> String {
+    if uri.starts_with("http") {
+        uri.to_string()
+    } else {
+        format!("{}/{}", base_url, uri)
+    }
+}
 
-        // Parse the m3u8 playlist
+/// URL of the directory containing the given playlist URL
+fn parent_url(url_str: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let mut url = url::Url::parse(url_str)?;
+    url.path_segments_mut()
+        .map_err(|_| "Cannot be base URL")?
+        .pop();
+    Ok(url.to_string())
+}
+
+/// Fetches the m3u8 playlist, following master playlists down to a media
+/// playlist, and returns the resolved segment URLs
+pub async fn resolve_hls_playlist(
+    token_secret: &str,
+    hls_url: &str,
+) -> Result<HlsPlaylist, Box<dyn std::error::Error + Send + Sync>> {
+    let client = http_client();
+    let mut url = hls_url.to_string();
+
+    // Bounded loop in case of nested master playlists
+    for _ in 0..4 {
+        let response = client.get(&url).bearer_auth(token_secret).send().await?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!("HTTP {} error fetching playlist", status).into());
+        }
+        let playlist_text = response.text().await?;
+
         let parsed = m3u8_rs::parse_playlist_res(playlist_text.as_bytes())
             .map_err(|e| format!("Failed to parse m3u8 playlist: {:?}", e))?;
-
-        // Determine the base URL for resolving relative segment URLs
-        let base_url = {
-            let mut url = url::Url::parse(hls_url)?;
-            url.path_segments_mut()
-                .map_err(|_| "Cannot be base URL")?
-                .pop();
-            url.to_string()
-        };
+        let base_url = parent_url(&url)?;
 
         match parsed {
             m3u8_rs::Playlist::MasterPlaylist(master) => {
-                // If it's a master playlist, get the first variant stream
-                if let Some(variant) = master.variants.first() {
-                    let variant_url = if variant.uri.starts_with("http") {
-                        variant.uri.clone()
-                    } else {
-                        format!("{}/{}", base_url, variant.uri)
-                    };
-                    // Recursively fetch the media playlist
-                    return download_hls_stream(token_secret.clone(), &variant_url).await;
-                }
-                Err("No variants found in master playlist".into())
+                let variant = master
+                    .variants
+                    .first()
+                    .ok_or("No variants found in master playlist")?;
+                url = resolve_uri(&base_url, &variant.uri);
             }
             m3u8_rs::Playlist::MediaPlaylist(media) => {
-                let mut all_bytes = Vec::new();
+                // Initialization segment (EXT-X-MAP) - required for fMP4
+                let init_url = media
+                    .segments
+                    .first()
+                    .and_then(|seg| seg.map.as_ref())
+                    .map(|map| resolve_uri(&base_url, &map.uri));
 
-                // Check for initialization segment (EXT-X-MAP) - required for fMP4
-                if let Some(first_seg) = media.segments.first()
-                    && let Some(map) = &first_seg.map
-                {
-                    let init_url = if map.uri.starts_with("http") {
-                        map.uri.clone()
-                    } else {
-                        format!("{}/{}", base_url, map.uri)
-                    };
-                    let init_response = client
-                        .get(&init_url)
-                        .bearer_auth(&token_secret)
-                        .send()
-                        .await?;
-                    let init_bytes = init_response.bytes().await?;
-                    all_bytes.extend_from_slice(&init_bytes);
-                }
-
-                // Collect all segment URLs
-                let segment_urls: Vec<String> = media
+                let segment_urls = media
                     .segments
                     .iter()
-                    .map(|seg| {
-                        if seg.uri.starts_with("http") {
-                            seg.uri.clone()
-                        } else {
-                            format!("{}/{}", base_url, seg.uri)
-                        }
-                    })
+                    .map(|seg| resolve_uri(&base_url, &seg.uri))
                     .collect();
 
-                // Download all segments concurrently (in batches to avoid overwhelming)
-                for chunk in segment_urls.chunks(10) {
-                    let futures: Vec<_> = chunk
-                        .iter()
-                        .map(|url| {
-                            let client = client.clone();
-                            let url = url.clone();
-                            let token = token_secret.clone();
-                            async move {
-                                let response = client.get(&url).bearer_auth(&token).send().await?;
-                                response.bytes().await
-                            }
-                        })
-                        .collect();
-
-                    let results = futures::future::join_all(futures).await;
-                    for result in results {
-                        match result {
-                            Ok(bytes) => all_bytes.extend_from_slice(&bytes),
-                            Err(e) => {
-                                return Err(format!("Failed to download segment: {}", e).into());
-                            }
-                        }
-                    }
-                }
-
-                // Detect format: fMP4 starts with box structure (ftyp/styp), MPEG-TS starts with 0x47
-                let is_fmp4 = all_bytes.len() >= 8
-                    && (&all_bytes[4..8] == b"ftyp"
-                        || &all_bytes[4..8] == b"styp"
-                        || &all_bytes[4..8] == b"moov");
-
-                if is_fmp4 {
-                    // Extract AAC from fMP4 and convert to ADTS for seeking support
-                    let aac_data = extract_aac_from_fmp4(&all_bytes)?;
-                    Ok(Bytes::from(aac_data))
-                } else {
-                    // MPEG-TS: demux to extract AAC ADTS frames
-                    let aac_data = extract_aac_from_mpegts(&all_bytes)?;
-                    Ok(Bytes::from(aac_data))
-                }
+                return Ok(HlsPlaylist {
+                    init_url,
+                    segment_urls,
+                });
             }
         }
-    })
+    }
+
+    Err("Too many nested master playlists".into())
+}
+
+/// Downloads a single HLS segment with a couple of retries
+pub async fn fetch_segment(
+    token_secret: &str,
+    url: &str,
+) -> Result<Bytes, Box<dyn std::error::Error + Send + Sync>> {
+    let client = http_client();
+    let mut last_error = String::new();
+
+    for attempt in 0..3 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        match client.get(url).bearer_auth(token_secret).send().await {
+            Ok(response) => {
+                let status = response.status();
+                if !status.is_success() {
+                    last_error = format!("HTTP {}", status);
+                    continue;
+                }
+                match response.bytes().await {
+                    Ok(bytes) => return Ok(bytes),
+                    Err(e) => last_error = e.to_string(),
+                }
+            }
+            Err(e) => last_error = e.to_string(),
+        }
+    }
+
+    Err(format!("Failed to download segment {}: {}", url, last_error).into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a valid ADTS frame (7-byte header + body) matching the header
+    /// layout produced by write_adts_frames
+    fn adts_frame(body_len: usize) -> Vec<u8> {
+        let frame_length = 7 + body_len;
+        let mut frame = vec![
+            0xFF,
+            0xF1,
+            (1 << 6) | (4 << 2), // AAC-LC, 44100 Hz, stereo
+            ((2 & 0x03) << 6) | ((frame_length >> 11) & 0x03) as u8,
+            ((frame_length >> 3) & 0xFF) as u8,
+            (((frame_length & 0x07) << 5) | 0x1F) as u8,
+            0xFC,
+        ];
+        frame.extend(std::iter::repeat_n(0xAB, body_len));
+        frame
+    }
+
+    /// Wrap a byte stream into 188-byte TS packets (payload-only)
+    fn ts_wrap(data: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for chunk in data.chunks(184) {
+            out.push(0x47);
+            out.push(0x00);
+            out.push(0x00);
+            out.push(0x10); // adaptation_field_control = 01 (payload only)
+            out.extend_from_slice(chunk);
+            out.resize(out.len() + (184 - chunk.len()), 0x00);
+        }
+        out
+    }
+
+    #[test]
+    fn ts_demux_reassembles_frames_across_segment_split() {
+        let mut adts_stream = Vec::new();
+        for len in [100, 250, 37, 512, 180] {
+            adts_stream.extend(adts_frame(len));
+        }
+        let ts = ts_wrap(&adts_stream);
+
+        // Split mid-packet to exercise the TS remainder carry-over
+        let split = 188 * 2 + 100;
+        let mut demuxer = HlsDemuxer::new();
+        let mut out = demuxer.push_segment(&ts[..split]).unwrap();
+        out.extend(demuxer.push_segment(&ts[split..]).unwrap());
+        out.extend(demuxer.finish());
+
+        assert_eq!(out, adts_stream);
+    }
+
+    /// Build an MP4 box with the given type and content
+    fn mp4_box(box_type: &[u8; 4], content: &[u8]) -> Vec<u8> {
+        let mut out = ((content.len() + 8) as u32).to_be_bytes().to_vec();
+        out.extend_from_slice(box_type);
+        out.extend_from_slice(content);
+        out
+    }
+
+    fn fmp4_init() -> Vec<u8> {
+        // esds with DecoderSpecificInfo (tag 0x05): AAC-LC, 44100 Hz, stereo,
+        // padded so the tag search window (starting at offset 12) covers it
+        let mut esds_content = vec![0, 0, 0, 0]; // version/flags
+        esds_content.extend_from_slice(&[0x05, 0x02, 0x12, 0x10, 0, 0, 0, 0]);
+        let esds = mp4_box(b"esds", &esds_content);
+
+        let nested = [
+            b"mp4a", b"stsd", b"stbl", b"minf", b"mdia", b"trak", b"moov",
+        ]
+        .iter()
+        .fold(esds, |inner, box_type| mp4_box(box_type, &inner));
+
+        let mut init = mp4_box(b"ftyp", b"isom");
+        init.extend(nested);
+        init
+    }
+
+    fn fmp4_segment(sample_sizes: &[u32]) -> (Vec<u8>, Vec<u8>) {
+        // trun: version + flags (sample sizes present) + count + sizes
+        let mut trun_content = vec![0x00, 0x00, 0x02, 0x00];
+        trun_content.extend((sample_sizes.len() as u32).to_be_bytes());
+        for size in sample_sizes {
+            trun_content.extend(size.to_be_bytes());
+        }
+        let moof = mp4_box(b"moof", &mp4_box(b"traf", &mp4_box(b"trun", &trun_content)));
+
+        let payload: Vec<u8> = sample_sizes
+            .iter()
+            .flat_map(|&size| std::iter::repeat_n(0xCD, size as usize))
+            .collect();
+
+        let mut segment = moof;
+        segment.extend(mp4_box(b"mdat", &payload));
+        (segment, payload)
+    }
+
+    #[test]
+    fn fmp4_demux_writes_adts_headers_and_carries_partial_boxes() {
+        let sample_sizes = [120u32, 300, 64];
+        let (segment, _) = fmp4_segment(&sample_sizes);
+
+        let mut expected = Vec::new();
+        for &size in &sample_sizes {
+            let mut frame = adts_frame(0);
+            frame[3..7].copy_from_slice(&{
+                let frame_length = 7 + size as usize;
+                [
+                    ((2 & 0x03) << 6) | ((frame_length >> 11) & 0x03) as u8,
+                    ((frame_length >> 3) & 0xFF) as u8,
+                    (((frame_length & 0x07) << 5) | 0x1F) as u8,
+                    0xFC,
+                ]
+            });
+            frame.extend(std::iter::repeat_n(0xCD, size as usize));
+            expected.extend(frame);
+        }
+
+        // Split mid-mdat to exercise the fMP4 remainder carry-over
+        let mut demuxer = HlsDemuxer::new();
+        demuxer.push_init(&fmp4_init());
+        let split = segment.len() - 50;
+        let first = demuxer.push_segment(&segment[..split]).unwrap();
+        assert!(first.is_empty(), "incomplete moof+mdat must be held back");
+        let mut out = first;
+        out.extend(demuxer.push_segment(&segment[split..]).unwrap());
+        out.extend(demuxer.finish());
+
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn fmp4_passthrough_when_mdat_already_adts() {
+        // mdat payload that already carries ADTS headers must not be re-wrapped
+        let adts_stream = [adts_frame(80), adts_frame(120)].concat();
+        let (mut segment, _) = fmp4_segment(&[adts_stream.len() as u32]);
+        // Rebuild the mdat with the ADTS payload
+        let moof_len = segment.len() - (8 + adts_stream.len());
+        segment.truncate(moof_len);
+        segment.extend(mp4_box(b"mdat", &adts_stream));
+
+        let mut demuxer = HlsDemuxer::new();
+        demuxer.push_init(&fmp4_init());
+        let out = demuxer.push_segment(&segment).unwrap();
+
+        assert_eq!(out, adts_stream);
+    }
 }
