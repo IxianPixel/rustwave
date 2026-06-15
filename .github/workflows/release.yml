@@ -117,6 +117,9 @@ jobs:
 
   build-macos-intel:
     runs-on: macos-13 # Intel runner
+    outputs:
+      version: ${{ steps.archive.outputs.version }}
+      sha256: ${{ steps.archive.outputs.sha256 }}
 
     steps:
       - uses: actions/checkout@v4
@@ -278,10 +281,13 @@ jobs:
           rm -f certificate.p12 AuthKey.p8 api-key.json Rustwave.zip
 
       - name: Create archive
+        id: archive
         run: |
           ARCHIVE_NAME="rustwave-macos-intel-v${VERSION}.tar.gz"
           tar -czf "$ARCHIVE_NAME" Rustwave.app
           echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -300,6 +306,9 @@ jobs:
 
   build-macos-arm:
     runs-on: macos-latest # ARM runner
+    outputs:
+      version: ${{ steps.archive.outputs.version }}
+      sha256: ${{ steps.archive.outputs.sha256 }}
 
     steps:
       - uses: actions/checkout@v4
@@ -461,10 +470,13 @@ jobs:
           rm -f certificate.p12 AuthKey.p8 api-key.json Rustwave.zip
 
       - name: Create archive
+        id: archive
         run: |
           ARCHIVE_NAME="rustwave-macos-arm-v${VERSION}.tar.gz"
           tar -czf "$ARCHIVE_NAME" Rustwave.app
           echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -647,3 +659,70 @@ jobs:
           files: ${{ env.ARCHIVE_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-cask:
+    needs: [build-macos-intel, build-macos-arm]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: IxianPixel/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: tap
+
+      - name: Write Casks/rustwave.rb
+        env:
+          VERSION: ${{ needs.build-macos-arm.outputs.version }}
+          ARM_SHA: ${{ needs.build-macos-arm.outputs.sha256 }}
+          INTEL_SHA: ${{ needs.build-macos-intel.outputs.sha256 }}
+        run: |
+          mkdir -p tap/Casks
+          cat > tap/Casks/rustwave.rb << EOF
+          cask "rustwave" do
+            version "${VERSION}"
+
+            on_arm do
+              sha256 "${ARM_SHA}"
+              url "https://github.com/IxianPixel/rustwave/releases/download/v#{version}/rustwave-macos-arm-v#{version}.tar.gz"
+            end
+            on_intel do
+              sha256 "${INTEL_SHA}"
+              url "https://github.com/IxianPixel/rustwave/releases/download/v#{version}/rustwave-macos-intel-v#{version}.tar.gz"
+            end
+
+            name "Rustwave"
+            desc "SoundCloud music player built with Rust and Iced"
+            homepage "https://github.com/IxianPixel/rustwave"
+
+            app "Rustwave.app"
+
+            # The app is ad-hoc signed (no Apple Developer ID / notarization),
+            # so strip the quarantine flag on install to avoid Gatekeeper
+            # blocking launch.
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/Rustwave.app"]
+            end
+
+            zap trash: [
+              "~/Library/Application Support/com.malgra.rustwave",
+              "~/Library/Saved Application State/com.rustwave.app.savedState",
+            ]
+          end
+          EOF
+
+      - name: Commit and push
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/rustwave.rb
+          if git diff --staged --quiet; then
+            echo "No cask changes to commit."
+          else
+            git commit -m "rustwave ${{ needs.build-macos-arm.outputs.version }}"
+            git push
+          fi

@@ -5,7 +5,7 @@ use crate::pages::AuthPage;
 use iced::animation::Animation;
 use iced::widget::image::Handle;
 use iced::{
-    Event, Length, Subscription, Task,
+    Event, Length, Padding, Subscription, Task,
     event::{self, Status},
     keyboard::{Event::KeyPressed, Key, key::Named},
     time,
@@ -29,6 +29,13 @@ fn main() -> iced::Result {
         .subscription(MyApp::subscription)
         .window(window::Settings {
             icon,
+            // Extend the catppuccin background up into the titlebar: make the
+            // native macOS titlebar transparent and draw content behind it.
+            platform_specific: window::settings::PlatformSpecific {
+                title_hidden: true,
+                titlebar_transparent: true,
+                fullsize_content_view: true,
+            },
             ..Default::default()
         })
         .run()
@@ -524,7 +531,7 @@ impl MyApp {
     }
 
     fn view(&self) -> iced::Element<'_, Message> {
-        column![
+        container(column![
             widgets::get_playback_bar(
                 self.artwork.clone(),
                 self.artwork_anim.interpolate(0.0, 1.0, Instant::now()),
@@ -544,7 +551,10 @@ impl MyApp {
                 .padding(5)
                 .width(Length::Fill)
                 .height(Length::FillPortion(1)),
-        ]
+        ])
+        // Clear the transparent titlebar region so content isn't hidden
+        // behind the macOS traffic-light buttons.
+        .padding(Padding::ZERO.top(28.0))
         .into()
     }
 }
