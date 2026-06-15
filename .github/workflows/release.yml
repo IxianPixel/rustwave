@@ -142,3 +142,87 @@ jobs:
           files: ${{ env.ARCHIVE_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-cask:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rustwave-macos-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Compute checksums and version
+        id: meta
+        run: |
+          ARM_FILE=$(ls artifacts/rustwave-macos-arm-*.tar.gz)
+          INTEL_FILE=$(ls artifacts/rustwave-macos-intel-*.tar.gz)
+          VERSION=$(basename "$ARM_FILE" | sed -E 's/^rustwave-macos-arm-v(.+)\.tar\.gz$/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "arm_sha=$(shasum -a 256 "$ARM_FILE" | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "intel_sha=$(shasum -a 256 "$INTEL_FILE" | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: IxianPixel/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: tap
+
+      - name: Write Casks/rustwave.rb
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          ARM_SHA: ${{ steps.meta.outputs.arm_sha }}
+          INTEL_SHA: ${{ steps.meta.outputs.intel_sha }}
+        run: |
+          mkdir -p tap/Casks
+          cat > tap/Casks/rustwave.rb << EOF
+          cask "rustwave" do
+            version "${VERSION}"
+
+            on_arm do
+              sha256 "${ARM_SHA}"
+              url "https://github.com/IxianPixel/rustwave/releases/download/v#{version}/rustwave-macos-arm-v#{version}.tar.gz"
+            end
+            on_intel do
+              sha256 "${INTEL_SHA}"
+              url "https://github.com/IxianPixel/rustwave/releases/download/v#{version}/rustwave-macos-intel-v#{version}.tar.gz"
+            end
+
+            name "Rustwave"
+            desc "SoundCloud music player built with Rust and Iced"
+            homepage "https://github.com/IxianPixel/rustwave"
+
+            app "Rustwave.app"
+
+            # The app is ad-hoc signed (no Apple Developer ID / notarization),
+            # so strip the quarantine flag on install to avoid Gatekeeper
+            # blocking launch.
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/Rustwave.app"]
+            end
+
+            zap trash: [
+              "~/Library/Application Support/com.malgra.rustwave",
+              "~/Library/Saved Application State/com.rustwave.app.savedState",
+            ]
+          end
+          EOF
+
+      - name: Commit and push
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/rustwave.rb
+          if git diff --staged --quiet; then
+            echo "No cask changes to commit."
+          else
+            git commit -m "rustwave ${{ steps.meta.outputs.version }}"
+            git push
+          fi
