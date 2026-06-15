@@ -1,16 +1,7 @@
 [package]
 name = "rustwave"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
-
-[package.metadata.bundle]
-name = "Rustwave"
-identifier = "com.rustwave.app"
-icon = ["assets/icon.png"]
-resources = ["assets", ".env"]
-category = "Music"
-short_description = "A SoundCloud music player"
-osx_minimum_system_version = "10.12"
 
 [features]
 # Opt-in iced hot reloading. Run with: `cargo hot run --features hot`

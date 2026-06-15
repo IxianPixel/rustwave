@@ -69,9 +69,44 @@ A SoundCloud account is **required**
       sudo yum install openssl-devel alsa-lib-devel dbus-devel
       ```
 
-### Building
+### macOS (Homebrew)
 
-At the moment you need to clone to repo and build it yourself.
+The easiest way to install Rustwave on macOS is via [Homebrew](https://brew.sh) — there's no need to
+clone the repo or install Rust. Pre-built app bundles are published for both Apple Silicon and Intel Macs:
+
+```shell
+brew install --cask ixianpixel/tap/rustwave
+```
+
+This taps `ixianpixel/tap` and installs the latest release into `/Applications`. Upgrade to a newer
+release later with:
+
+```shell
+brew upgrade --cask rustwave
+```
+
+> [!NOTE]
+> Rustwave is not signed with an Apple Developer ID, so the cask automatically clears the macOS
+> quarantine flag on install — no manual `xattr` step or Gatekeeper override required.
+
+If you don't have administrator access (installing to `/Applications` would otherwise prompt for a
+password), install into your personal Applications folder instead:
+
+```shell
+brew install --cask ixianpixel/tap/rustwave --appdir=~/Applications
+```
+
+To remove it again:
+
+```shell
+brew uninstall --cask rustwave        # removes the app
+brew uninstall --cask --zap rustwave  # also removes saved settings and your cached login
+```
+
+### Building from source
+
+You can also build Rustwave yourself. On macOS this is only needed if you'd rather not use the
+[Homebrew](#macos-homebrew) cask above; on Windows and Linux it's currently the only option.
 
 #### MacOS
 
