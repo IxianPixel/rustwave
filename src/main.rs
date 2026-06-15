@@ -31,10 +31,16 @@ fn main() -> iced::Result {
             icon,
             // Extend the catppuccin background up into the titlebar: make the
             // native macOS titlebar transparent and draw content behind it.
+            // These fields only exist on macOS, so gate them per-target and
+            // fall back to platform defaults elsewhere.
             platform_specific: window::settings::PlatformSpecific {
+                #[cfg(target_os = "macos")]
                 title_hidden: true,
+                #[cfg(target_os = "macos")]
                 titlebar_transparent: true,
+                #[cfg(target_os = "macos")]
                 fullsize_content_view: true,
+                ..Default::default()
             },
             ..Default::default()
         })
